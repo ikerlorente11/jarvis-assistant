@@ -20,16 +20,22 @@ def _pulsar(vk: int) -> None:
     ctypes.windll.user32.keybd_event(vk, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0)
 
 
-def play_pausa(config: dict) -> str:
+def _silencioso(texto: str):
+    from jarvis.results import Rich
+
+    return Rich(texto, speak="")
+
+
+def play_pausa(config: dict):
     _pulsar(VK_MEDIA_PLAY_PAUSE)
-    return "▶⏸"
+    return _silencioso("Play / pausa.")
 
 
-def siguiente(config: dict) -> str:
+def siguiente(config: dict):
     _pulsar(VK_MEDIA_NEXT)
-    return "⏭ Siguiente."
+    return _silencioso("Siguiente pista.")
 
 
-def anterior(config: dict) -> str:
+def anterior(config: dict):
     _pulsar(VK_MEDIA_PREV)
-    return "⏮ Anterior."
+    return _silencioso("Pista anterior.")

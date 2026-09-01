@@ -109,51 +109,61 @@ categories:
     icon: "⚙️"
     intents:
       - id: volumen_subir
+        hidden: true
         label: "Subir volumen"
         description: "Sube el volumen un 10%."
         patterns: ["sube el volumen", "más volumen", "sube volumen"]
         skill: system.volumen_subir
       - id: volumen_bajar
+        hidden: true
         label: "Bajar volumen"
         description: "Baja el volumen un 10%."
         patterns: ["baja el volumen", "menos volumen", "baja volumen"]
         skill: system.volumen_bajar
       - id: volumen_poner
+        hidden: true
         label: "Volumen al… {nivel}"
         description: "Pone el volumen a un porcentaje exacto (0-100)."
         patterns: ["volumen al {nivel}", "pon el volumen al {nivel}"]
         skill: system.volumen_poner
       - id: silenciar
+        hidden: true
         label: "Silenciar / activar sonido"
         description: "Alterna el silencio del sistema."
         patterns: ["silencio", "silénciate", "mute", "activa el sonido", "quita el silencio"]
         skill: system.silenciar
       - id: play_pausa
+        hidden: true
         label: "Play / pausa"
         description: "Pulsa la tecla multimedia play/pausa (Spotify, YouTube…)."
         patterns: ["pausa", "play", "reproduce", "para la música", "reanuda"]
         skill: media.play_pausa
       - id: siguiente
+        hidden: true
         label: "Siguiente canción"
         description: "Pasa a la siguiente pista del reproductor activo."
         patterns: ["siguiente", "siguiente canción", "pasa la canción"]
         skill: media.siguiente
       - id: anterior
+        hidden: true
         label: "Canción anterior"
         description: "Vuelve a la pista anterior del reproductor activo."
         patterns: ["anterior", "canción anterior", "vuelve a la canción"]
         skill: media.anterior
       - id: voz_activar
+        hidden: true
         label: "Activar la voz"
         description: "El asistente lee las respuestas en voz alta (Piper)."
         patterns: ["activa la voz", "habla", "lee las respuestas"]
         skill: speech.activar
       - id: voz_desactivar
+        hidden: true
         label: "Desactivar la voz"
         description: "El asistente deja de leer las respuestas."
         patterns: ["desactiva la voz", "cállate", "deja de hablar", "no hables"]
         skill: speech.desactivar
       - id: voz_volumen
+        hidden: true
         label: "Voz al… {nivel}"
         description: "Volumen de la voz del asistente, 0-100 (no el del sistema)."
         patterns: ["voz al {nivel}", "pon la voz al {nivel}", "volumen de la voz al {nivel}"]

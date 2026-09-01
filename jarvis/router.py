@@ -49,6 +49,7 @@ class Intent:
     params: dict = field(default_factory=dict)
     description: str = ""  # tooltip del menú y texto del diálogo del slot
     options_from: str | None = None  # clave de config cuyas claves son opciones
+    hidden: bool = False  # no aparece en menús/sugerencias (sí por texto/LLM)
 
     @property
     def slot(self) -> str | None:
@@ -94,6 +95,7 @@ class Router:
                         params=entry.get("params", {}),
                         description=entry.get("description", ""),
                         options_from=entry.get("options_from"),
+                        hidden=bool(entry.get("hidden", False)),
                     )
                 )
 

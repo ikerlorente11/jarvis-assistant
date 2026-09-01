@@ -16,7 +16,7 @@ import threading
 import time
 
 from PySide6.QtCore import QFileInfo, Qt, Signal
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSlider,
+    QSpinBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -44,19 +45,13 @@ MAX_ITEMS = 8
 MAX_SUGGESTIONS = 7
 SUGGESTION_CUTOFF = 55
 
-# Acciones que se pintan como barra de control compacta, no como filas
-CONTROL_BARS = (
-    ("anterior", "play_pausa", "siguiente"),
-    ("volumen_bajar", "silenciar", "volumen_subir"),
-)
-CONTROL_ICONS = {
-    "anterior": "⏮",
-    "play_pausa": "⏯",
-    "siguiente": "⏭",
-    "volumen_bajar": "🔉",
-    "silenciar": "🔇",
-    "volumen_subir": "🔊",
-}
+# Glifos de Segoe MDL2 Assets (iconos nativos de Windows)
+GLYPH_PREV = ""
+GLYPH_PLAY = ""
+GLYPH_NEXT = ""
+GLYPH_VOLUME = ""
+GLYPH_MUTE = ""
+CONSOLE_IDS = {"anterior", "play_pausa", "siguiente"}  # activa el mando
 
 STYLE = """
 QWidget#panel {
@@ -95,11 +90,16 @@ QPushButton#subrow {
 }
 QPushButton#rowAux { padding: 10px 10px; text-align: center; }
 QPushButton#rowAux:hover { background: #2c374b; }
+QWidget#console { background: #202836; border-radius: 12px; }
 QPushButton#ctrl {
-    background: #232b3a; color: #dbe3f0; border: none; border-radius: 10px;
-    padding: 8px; font-size: 17px; text-align: center;
+    background: #2a3444; color: #dbe3f0; border: none; border-radius: 18px;
+    min-width: 36px; max-width: 44px; min-height: 36px; text-align: center;
 }
-QPushButton#ctrl:hover { background: #37445c; }
+QPushButton#ctrl:hover { background: #3f7cff; color: #ffffff; }
+QSpinBox {
+    background: #232b3a; color: #dbe3f0; border: 1px solid #313c50;
+    border-radius: 8px; padding: 3px 6px; font-size: 12px;
+}
 QScrollArea { border: none; background: transparent; }
 QScrollBar:vertical { background: transparent; width: 8px; }
 QScrollBar::handle:vertical { background: #313c50; border-radius: 4px; min-height: 24px; }
@@ -230,12 +230,16 @@ class Panel(QWidget):
             self.voz_combo.setCurrentIndex(index)
         self.voz_combo.currentIndexChanged.connect(self._on_voz_cambiada)
         voz_row.addWidget(self.voz_combo)
-        self.voz_slider = QSlider(Qt.Horizontal)
-        self.voz_slider.setRange(0, 100)
-        self.voz_slider.setValue(self.tts.volume)
-        self.voz_slider.setToolTip("Volumen de la voz del asistente")
-        self.voz_slider.valueChanged.connect(self._on_voz_volumen)
-        voz_row.addWidget(self.voz_slider, stretch=1)
+        # spinbox, no slider: que no se confunda con el volumen del sistema
+        self.voz_nivel = QSpinBox()
+        self.voz_nivel.setRange(0, 100)
+        self.voz_nivel.setSingleStep(5)
+        self.voz_nivel.setSuffix(" %")
+        self.voz_nivel.setValue(self.tts.volume)
+        self.voz_nivel.setToolTip("Volumen de la voz del asistente")
+        self.voz_nivel.valueChanged.connect(self._on_voz_volumen)
+        voz_row.addWidget(self.voz_nivel)
+        voz_row.addStretch(1)
         layout.addLayout(voz_row)
 
         self.setFixedSize(WIDTH, HEIGHT)
@@ -292,19 +296,11 @@ class Panel(QWidget):
         self.hint.setText(f"{cat['icon']} {cat['label']} — Esc para volver")
         self._add_row("←   Volver a los grupos", self._show_categories)
         del_grupo = [i for i in self.router.intents if i.category == cat_id]
-        ids = {i.id for i in del_grupo}
-        pintados: set[str] = set()
+        if CONSOLE_IDS <= {i.id for i in del_grupo}:
+            self._add_console()
         for intent in del_grupo:
-            if intent.id in pintados:
-                continue
-            barra = next(
-                (b for b in CONTROL_BARS if intent.id in b and set(b) <= ids), None
-            )
-            if barra:
-                self._add_control_bar([i for j in barra
-                                       for i in del_grupo if i.id == j])
-                pintados.update(barra)
-                continue
+            if intent.hidden:
+                continue  # lo cubre el mando o los controles del pie
             self._add_row(
                 self._button_text(intent),
                 lambda i=intent: self._on_intent(i),
@@ -312,19 +308,77 @@ class Panel(QWidget):
                 kind="subrow",
             )
 
-    def _add_control_bar(self, intents) -> None:
-        """Fila de botones compactos tipo reproductor (⏮ ⏯ ⏭ / 🔉 🔇 🔊)."""
-        holder = QWidget()
-        row = QHBoxLayout(holder)
-        row.setContentsMargins(0, 2, 0, 2)
-        row.setSpacing(6)
-        for intent in intents:
-            button = QPushButton(CONTROL_ICONS.get(intent.id, "•"), objectName="ctrl")
-            button.setToolTip(intent.label + (
-                f" — {intent.description}" if intent.description else ""))
-            button.clicked.connect(lambda _=False, i=intent: self._on_intent(i))
-            row.addWidget(button, stretch=1)
-        self.rows.insertWidget(self.rows.count() - 1, holder)
+    def _glyph_button(self, glyph: str, tooltip: str, on_click) -> QPushButton:
+        button = QPushButton(glyph, objectName="ctrl")
+        button.setFont(QFont("Segoe MDL2 Assets", 12))
+        button.setToolTip(tooltip)
+        button.clicked.connect(lambda _=False: on_click())
+        return button
+
+    def _add_console(self) -> None:
+        """Mando multimedia: anterior/play/siguiente + volumen del sistema
+        en vivo (el slider toca pycaw directamente, sin pasar por el router:
+        sin recargas ni parpadeos)."""
+        from jarvis.skills.system import _volume_control
+
+        card = QWidget(objectName="console")
+        box = QVBoxLayout(card)
+        box.setContentsMargins(12, 10, 12, 10)
+        box.setSpacing(8)
+
+        media = QHBoxLayout()
+        media.setSpacing(10)
+        media.addStretch(1)
+        for glyph, intent_id, tip in (
+            (GLYPH_PREV, "anterior", "Pista anterior"),
+            (GLYPH_PLAY, "play_pausa", "Play / pausa"),
+            (GLYPH_NEXT, "siguiente", "Siguiente pista"),
+        ):
+            intent = next(i for i in self.router.intents if i.id == intent_id)
+            media.addWidget(
+                self._glyph_button(glyph, tip, lambda i=intent: self._run_intent(i, None))
+            )
+        media.addStretch(1)
+        box.addLayout(media)
+
+        vol_row = QHBoxLayout()
+        vol_row.setSpacing(8)
+        self._mute_btn = self._glyph_button(GLYPH_VOLUME, "Silenciar", self._toggle_mute)
+        vol_row.addWidget(self._mute_btn)
+        slider = QSlider(Qt.Horizontal)
+        slider.setRange(0, 100)
+        slider.setToolTip("Volumen del sistema")
+        try:
+            vol = _volume_control()
+            slider.setValue(round(vol.GetMasterVolumeLevelScalar() * 100))
+            if vol.GetMute():
+                self._mute_btn.setText(GLYPH_MUTE)
+        except Exception:
+            slider.setEnabled(False)
+        slider.valueChanged.connect(self._set_system_volume)
+        vol_row.addWidget(slider, stretch=1)
+        box.addLayout(vol_row)
+
+        self.rows.insertWidget(self.rows.count() - 1, card)
+
+    def _set_system_volume(self, value: int) -> None:
+        from jarvis.skills.system import _volume_control
+
+        try:
+            _volume_control().SetMasterVolumeLevelScalar(value / 100, None)
+        except Exception:
+            pass
+
+    def _toggle_mute(self) -> None:
+        from jarvis.skills.system import _volume_control
+
+        try:
+            vol = _volume_control()
+            mute = not vol.GetMute()
+            vol.SetMute(mute, None)
+            self._mute_btn.setText(GLYPH_MUTE if mute else GLYPH_VOLUME)
+        except Exception:
+            pass
 
     def _on_typing(self, text: str) -> None:
         if self._busy or self._pending_intent is not None:
@@ -342,6 +396,8 @@ class Panel(QWidget):
         self.hint.setText("Sugerencias — Enter para enviar tal cual")
         scored = []
         for intent in self.router.intents:
+            if intent.hidden:
+                continue
             score = fuzz.WRatio(query.lower(), intent.label.lower())
             for pattern in intent.patterns:
                 base = pattern.split("{")[0].strip()
@@ -427,6 +483,11 @@ class Panel(QWidget):
     def _submit_slot(self, value: str) -> None:
         intent = self._pending_intent
         self._exit_slot_mode()
+        # las filas muestran aún las opciones del slot: restaurar la vista
+        if self._current_cat:
+            self._show_category(self._current_cat)
+        else:
+            self._show_categories()
         if intent is not None and value.strip():
             self._run_intent(intent, value.strip())
 
@@ -483,8 +544,7 @@ class Panel(QWidget):
         self.working.emit(True)
         self._placeholder = True
         self._set_response(text=f"⏳ {label}…")
-        self._clear_rows()
-        self.latency.hide()
+        self.latency.hide()  # la lista NO se toca: sin parpadeos
 
     def _set_response(self, text: str | None = None, html: str | None = None) -> None:
         """Pinta la respuesta y ajusta la altura al contenido (sin hueco)."""
@@ -506,12 +566,8 @@ class Panel(QWidget):
             self._set_response(html=result.html)
         else:
             self._set_response(text=result.text)
-        if result.items:
+        if result.items:  # si no hay resultados, la lista se queda como está
             self._show_items(result.items)
-        elif self._current_cat:  # quedarse donde estaba el usuario
-            self._show_category(self._current_cat)
-        else:
-            self._show_categories()
         if self.debug:
             self.latency.setText(
                 f"{result.elapsed_ms:.1f} ms · intent={result.intent_id}"
