@@ -35,7 +35,7 @@ def _normalize(text: str) -> str:
     que forman parte de nombres y URLs (notepad++, google.com, a/b)."""
     text = unicodedata.normalize("NFKD", text.lower())
     text = "".join(c for c in text if not unicodedata.combining(c))
-    text = re.sub(r"[^\w\s.+#:/&=%-]", " ", text)
+    text = re.sub(r"[^\w\s.+#:/&=%@-]", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
 

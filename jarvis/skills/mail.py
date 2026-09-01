@@ -28,6 +28,19 @@ IMAP_PRESETS = {
     "yahoo.com": "imap.mail.yahoo.com",
 }
 
+SMTP_PRESETS = {
+    "gmail.com": "smtp.gmail.com",
+    "googlemail.com": "smtp.gmail.com",
+    "outlook.com": "smtp-mail.outlook.com",
+    "outlook.es": "smtp-mail.outlook.com",
+    "hotmail.com": "smtp-mail.outlook.com",
+    "hotmail.es": "smtp-mail.outlook.com",
+    "live.com": "smtp-mail.outlook.com",
+    "yahoo.com": "smtp.mail.yahoo.com",
+}
+
+_borrador: dict | None = None  # borrador pendiente de confirmar
+
 
 def enlazar(address: str, password: str, imap_server: str = "") -> str:
     """Prueba las credenciales y, si funcionan, las guarda. → mensaje."""
@@ -229,6 +242,97 @@ def ultimo(config: dict):
         f"📩 {asunto} — {remitente}\n\n{extracto}…",
         speak=f"Último correo de {remitente}: {asunto}.",
     )
+
+
+def redactar(config: dict, peticion: str):
+    """El LLM redacta un borrador a partir de la petición; NUNCA se envía
+    sin que el usuario lo revise y confirme."""
+    import re
+
+    from jarvis.results import Item, Rich
+
+    global _borrador
+    cuenta = cuenta_enlazada(config)
+    if not cuenta:
+        return "No hay ningún correo enlazado — hazlo desde ⚙ Ajustes."
+
+    # destinatario: dirección literal en la petición, o alias de contacts
+    match = re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", peticion)
+    para = match.group(0) if match else None
+    if para is None:
+        contactos = config.get("contacts") or {}
+        for nombre, direccion in contactos.items():
+            if nombre.lower() in peticion.lower():
+                para = direccion
+                break
+    if para is None:
+        return ("No sé la dirección del destinatario: dila en la petición "
+                "(«…a nombre@dominio.com») o añade el contacto a `contacts` "
+                "en config.yaml.")
+
+    brain = config.get("_brain")
+    if brain is None:
+        return "Para redactar necesito el LLM y no está disponible."
+    salida = brain.quick(
+        "Redacta un correo en español a partir de la petición. Responde "
+        "EXACTAMENTE en este formato, sin nada más:\n"
+        "ASUNTO: <una línea>\nCUERPO:\n<cuerpo breve y natural>",
+        f"Petición: {peticion}",
+    )
+    if not salida:
+        return "No he podido redactar el borrador (¿Ollama está en marcha?)."
+    asunto, cuerpo = "Mensaje", salida.strip()
+    encaje = re.search(r"ASUNTO:\s*(.+?)\s*CUERPO:\s*(.+)", salida, re.DOTALL)
+    if encaje:
+        asunto, cuerpo = encaje.group(1).strip(), encaje.group(2).strip()
+
+    _borrador = {"para": para, "asunto": asunto, "cuerpo": cuerpo}
+    return Rich(
+        f"Para: {para}\nAsunto: {asunto}\n{'─' * 30}\n{cuerpo}",
+        items=[
+            Item("intent", "✅  Enviarlo", "correo_confirmar"),
+            Item("intent", "❌  Descartarlo", "correo_cancelar"),
+        ],
+        speak="Te he preparado el borrador; revísalo y confirma.",
+    )
+
+
+def confirmar(config: dict) -> str:
+    """Envía el borrador pendiente por SMTP."""
+    import smtplib
+    from email.mime.text import MIMEText
+
+    global _borrador
+    if _borrador is None:
+        return "No hay ningún borrador pendiente."
+    cuenta = cuenta_enlazada(config)
+    password = keyring.get_password(SERVICE, cuenta) if cuenta else None
+    if not cuenta or not password:
+        return "No hay correo enlazado o falta la contraseña (⚙ Ajustes)."
+    dominio = cuenta.split("@", 1)[1]
+    servidor = SMTP_PRESETS.get(dominio, f"smtp.{dominio}")
+    mensaje = MIMEText(_borrador["cuerpo"], "plain", "utf-8")
+    mensaje["From"] = cuenta
+    mensaje["To"] = _borrador["para"]
+    mensaje["Subject"] = _borrador["asunto"]
+    try:
+        with smtplib.SMTP(servidor, 587, timeout=15) as smtp:
+            smtp.starttls()
+            smtp.login(cuenta, password)
+            smtp.send_message(mensaje)
+    except (smtplib.SMTPException, OSError) as exc:
+        return f"No he podido enviarlo: {exc.__class__.__name__}."
+    enviado_a = _borrador["para"]
+    _borrador = None
+    return f"✉️ Enviado a {enviado_a}."
+
+
+def cancelar(config: dict) -> str:
+    global _borrador
+    if _borrador is None:
+        return "No había ningún borrador pendiente."
+    _borrador = None
+    return "Borrador descartado."
 
 
 def _cuerpo(mensaje) -> str:

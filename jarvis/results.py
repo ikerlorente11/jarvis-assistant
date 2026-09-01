@@ -12,9 +12,9 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class Item:
-    kind: str  # "file" | "folder" | "app"
+    kind: str  # "file" | "folder" | "app" | "intent"
     label: str  # nombre visible (sin ruta)
-    path: str  # qué abrir al pulsarlo
+    path: str  # qué abrir al pulsarlo (para "intent": el id a ejecutar)
 
 
 @dataclass

@@ -397,11 +397,12 @@ class Panel(QWidget):
             if item.kind in ("file", "folder"):
                 aux = ("📂", "Abrir la carpeta que lo contiene",
                        lambda i=item: self._open_location(i))
+            es_accion = item.kind == "intent"
             self._add_row(
                 item.label,
                 lambda i=item: self._open_item(i),
-                icon=self._icons.icon(QFileInfo(item.path)),
-                tooltip=item.path,
+                icon=None if es_accion else self._icons.icon(QFileInfo(item.path)),
+                tooltip="" if es_accion else item.path,
                 aux=aux,
             )
 
@@ -778,6 +779,14 @@ class Panel(QWidget):
     # -- resultados clicables ------------------------------------------------
 
     def _open_item(self, item) -> None:
+        if item.kind == "intent":  # botón de acción (confirmar envío, etc.)
+            intent = next(
+                (i for i in self.router.intents if i.id == item.path), None
+            )
+            if intent is not None:
+                self._show_categories()
+                self._run_intent(intent, None)
+            return
         try:
             os.startfile(item.path)
             self.response.setPlainText(f"Abriendo {item.label}.")

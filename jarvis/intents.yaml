@@ -258,3 +258,24 @@ categories:
           - "busca correos de {remitente}"
           - "correos de {remitente}"
         skill: mail.de_remitente
+      - id: correo_enviar
+        label: "Enviar correo: {peticion}"
+        description: "El asistente redacta el correo por ti y te lo enseña antes de enviarlo. Ej.: a maria@x.com diciendo que llego 10 min tarde"
+        patterns:
+          - "envía un correo {peticion}"
+          - "manda un correo {peticion}"
+          - "escribe un correo {peticion}"
+          - "envía un email {peticion}"
+        skill: mail.redactar
+      - id: correo_confirmar
+        label: "Confirmar envío"
+        hidden: true
+        description: "Envía el borrador pendiente."
+        patterns: ["envíalo", "mándalo", "confirma el envío", "sí envíalo"]
+        skill: mail.confirmar
+      - id: correo_cancelar
+        label: "Descartar borrador"
+        hidden: true
+        description: "Descarta el borrador pendiente."
+        patterns: ["no lo envíes", "descarta el correo", "cancela el correo"]
+        skill: mail.cancelar

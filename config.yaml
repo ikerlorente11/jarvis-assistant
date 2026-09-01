@@ -53,3 +53,7 @@ feeds:
 
 # Correo enlazado: address/imap van a config.local.yaml desde Ajustes;
 # la contraseña, al Almacén de credenciales de Windows (nunca a un fichero).
+
+# Contactos para "envía un correo a mamá diciendo…": nombre → dirección
+contacts: {}
+#  mamá: ejemplo@gmail.com
