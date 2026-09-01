@@ -309,9 +309,9 @@ def redactar(config: dict, peticion: str, para_mi: str = ""):
     if brain is None:
         return "Para redactar necesito el LLM y no está disponible."
     nota_meme = (
-        f"\nEl correo lleva incrustada una imagen de meme titulada "
-        f"«{meme['titulo']}»: escribe solo una frase breve de acompañamiento, "
-        f"sin describir el meme ni inventar otro." if meme else ""
+        f"\nDebajo del texto irá una imagen de meme titulada "
+        f"«{meme['titulo']}» que añadiré yo: escribe SOLO una frase breve de "
+        f"acompañamiento. NO escribas etiquetas <img>." if meme else ""
     )
     if quiere_html:
         salida = brain.quick(
@@ -340,6 +340,10 @@ def redactar(config: dict, peticion: str, para_mi: str = ""):
         if encaje.group(2) or quiere_html:
             cuerpo_html = re.sub(r"<script.*?</script>", "", contenido,
                                  flags=re.DOTALL | re.IGNORECASE)
+            # cualquier <img> del LLM es inventada (URLs rotas): fuera;
+            # las imágenes reales las añadimos nosotros con cid
+            cuerpo_html = re.sub(r"<img[^>]*>", "", cuerpo_html,
+                                 flags=re.IGNORECASE)
             cuerpo = _texto_plano(cuerpo_html)
         else:
             cuerpo = contenido
