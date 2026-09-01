@@ -44,6 +44,16 @@ categories:
           - "tiempo para los próximos {dias} días"
           - "qué tiempo hará estos {dias} días"
         skill: weather.prevision
+      - id: noticias
+        label: "Las noticias"
+        description: "Titulares de tus feeds RSS (configurables en `feeds` de config.yaml)."
+        patterns: ["las noticias", "dame las noticias", "qué ha pasado hoy", "titulares"]
+        skill: news.titulares
+      - id: convertir
+        label: "Convertir: {expresion}"
+        description: "Convierte unidades. Ej.: 10 km a millas, 100 f a c, 2 libras a kg."
+        patterns: ["convierte {expresion}", "cuánto es {expresion}", "cuántos son {expresion}"]
+        skill: convert.convertir
       - id: bateria
         label: "Batería"
         description: "Nivel de batería y tiempo restante estimado."
@@ -188,6 +198,21 @@ categories:
         description: "Temporizador con notificación de Windows. Ej.: 10 minutos, 30 segundos, 1 hora."
         patterns: ["avísame en {tiempo}", "temporizador de {tiempo}", "pon un temporizador de {tiempo}"]
         skill: timers.crear
+      - id: recordatorio_crear
+        label: "Recuérdame: {texto}"
+        description: "Recordatorio con aviso (sobrevive a reinicios). Ej.: llamar al médico en 2 horas · sacar la basura a las 21:30 · revisar correo mañana a las 9"
+        patterns: ["recuérdame {texto}", "recuérdame que {texto}", "recuerda que {texto}"]
+        skill: reminders.crear
+      - id: recordatorio_listar
+        label: "Mis recordatorios"
+        description: "Lista los recordatorios pendientes, numerados."
+        patterns: ["mis recordatorios", "qué recordatorios tengo", "lista los recordatorios"]
+        skill: reminders.listar
+      - id: recordatorio_borrar
+        label: "Borrar recordatorio: {numero}"
+        description: "Borra un recordatorio por su número (míralos en «Mis recordatorios»)."
+        patterns: ["borra el recordatorio {numero}", "quita el recordatorio {numero}"]
+        skill: reminders.borrar
       - id: nota_crear
         label: "Apuntar nota: {texto}"
         description: "Añade una nota con fecha a Documentos\\notas-jarvis.md."
@@ -203,3 +228,13 @@ categories:
         description: "Muestra lo último que has copiado."
         patterns: ["lee el portapapeles", "qué he copiado", "lee lo que he copiado"]
         skill: clipboard.leer
+
+  comunicacion:
+    label: Comunicación
+    icon: "📧"
+    intents:
+      - id: correo_leer
+        label: "¿Tengo correos nuevos?"
+        description: "Lee los correos sin abrir de la cuenta enlazada (⚙ Ajustes)."
+        patterns: ["tengo correos nuevos", "lee mi correo", "correos nuevos", "revisa el correo"]
+        skill: mail.leer

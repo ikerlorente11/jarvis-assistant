@@ -136,6 +136,7 @@ class Panel(QWidget):
     fast_done = Signal(object)  # Result de un intent ejecutado en hilo
     token = Signal(str)  # streaming del LLM (emitida desde su hilo)
     llm_done = Signal(str, float)  # respuesta completa + latencia ms
+    mail_result = Signal(str)  # resultado de enlazar/desenlazar el correo
 
     def __init__(self, router: Router, debug: bool = False, brain=None):
         super().__init__(
@@ -159,6 +160,7 @@ class Panel(QWidget):
         self.fast_done.connect(self._on_fast_done)
         self.token.connect(self._on_token)
         self.llm_done.connect(self._on_llm_done)
+        self.mail_result.connect(self._on_mail_result)
 
     # -- construcción --------------------------------------------------------
 
@@ -172,11 +174,16 @@ class Panel(QWidget):
         layout.setContentsMargins(16, 16, 16, 12)
         layout.setSpacing(10)
 
+        top = QHBoxLayout()
+        top.setSpacing(8)
         self.input = QLineEdit(objectName="search")
         self.input.setPlaceholderText("🔍  Pídeme algo o elige una acción…")
         self.input.returnPressed.connect(self._on_text)
         self.input.textChanged.connect(self._on_typing)
-        layout.addWidget(self.input)
+        top.addWidget(self.input, stretch=1)
+        gear = self._glyph_button(chr(0xE713), "Ajustes", self._show_settings)
+        top.addWidget(gear)
+        layout.addLayout(top)
 
         self.hint = QLabel("", objectName="hint")
         layout.addWidget(self.hint)
@@ -222,43 +229,7 @@ class Panel(QWidget):
         self.latency.hide()
         layout.addWidget(self.latency)
 
-        # Voz del asistente: interruptor + selector de voz + volumen propio.
-        voz_row = QHBoxLayout()
-        self.voz_check = QCheckBox("🔊")
-        self.voz_check.setChecked(self.tts.enabled)
-        self.voz_check.setToolTip("Leer las respuestas en voz alta")
-        self.voz_check.toggled.connect(self._on_voz_toggled)
-        voz_row.addWidget(self.voz_check)
-        self.voz_combo = QComboBox()
-        self.voz_combo.setToolTip("Voz del asistente — al cambiarla la oyes")
-        for voice in TTS.installed_voices():
-            self.voz_combo.addItem(self._voice_label(voice), voice)
-        index = self.voz_combo.findData(self.tts.voice_name)
-        if index >= 0:
-            self.voz_combo.setCurrentIndex(index)
-        self.voz_combo.currentIndexChanged.connect(self._on_voz_cambiada)
-        voz_row.addWidget(self.voz_combo)
-        # botones -/+ con etiqueta, no slider: que no se confunda con el
-        # volumen del sistema, y siempre clicables
-        menos = QPushButton("−", objectName="step")
-        menos.setToolTip("Bajar el volumen de la voz")
-        menos.clicked.connect(lambda _=False: self._voz_ajustar(-10))
-        voz_row.addWidget(menos)
-        self.voz_pct = QLineEdit(str(self.tts.volume), objectName="vozPct")
-        self.voz_pct.setValidator(QIntValidator(0, 100, self))
-        self.voz_pct.setFixedWidth(38)
-        self.voz_pct.setAlignment(Qt.AlignCenter)
-        self.voz_pct.setToolTip("Volumen de la voz del asistente (editable)")
-        self.voz_pct.editingFinished.connect(self._on_voz_editado)
-        voz_row.addWidget(self.voz_pct)
-        voz_row.addWidget(QLabel("%"))
-        mas = QPushButton("+", objectName="step")
-        mas.setToolTip("Subir el volumen de la voz")
-        mas.clicked.connect(lambda _=False: self._voz_ajustar(+10))
-        voz_row.addWidget(mas)
-        voz_row.addStretch(1)
-        layout.addLayout(voz_row)
-
+        self.voz_pct = None  # se crean al abrir ⚙ Ajustes
         self.setFixedSize(WIDTH, HEIGHT)
         self._show_categories()
 
@@ -482,6 +453,133 @@ class Panel(QWidget):
                 tooltip=item.path,
                 aux=aux,
             )
+
+    # -- ajustes -------------------------------------------------------------
+
+    def _settings_card(self, titulo: str):
+        """Tarjeta de sección en Ajustes; devuelve su layout interior."""
+        card = QWidget(objectName="console")
+        box = QVBoxLayout(card)
+        box.setContentsMargins(12, 10, 12, 10)
+        box.setSpacing(6)
+        etiqueta = QLabel(titulo)
+        etiqueta.setStyleSheet("font-weight: bold; color: #9db8e8; font-size: 12px;")
+        box.addWidget(etiqueta)
+        self.rows.insertWidget(self.rows.count() - 1, card)
+        return box
+
+    def _show_settings(self) -> None:
+        from jarvis import autostart
+        from jarvis.skills import mail
+
+        self._clear_rows()
+        self._view = "settings"
+        self._current_cat = None
+        self.hint.setText("⚙ Ajustes — Esc para volver")
+        self._add_row("←   Volver", self._show_categories)
+
+        # ---- Voz ----
+        voz = self._settings_card("🔊  Voz del asistente")
+        fila1 = QHBoxLayout()
+        self.voz_check = QCheckBox("Leer las respuestas en voz alta")
+        self.voz_check.setChecked(self.tts.enabled)
+        self.voz_check.toggled.connect(self._on_voz_toggled)
+        fila1.addWidget(self.voz_check, stretch=1)
+        voz.addLayout(fila1)
+        fila2 = QHBoxLayout()
+        fila2.setSpacing(8)
+        self.voz_combo = QComboBox()
+        self.voz_combo.setToolTip("Al cambiar de voz, la oyes")
+        for voice in TTS.installed_voices():
+            self.voz_combo.addItem(self._voice_label(voice), voice)
+        index = self.voz_combo.findData(self.tts.voice_name)
+        if index >= 0:
+            self.voz_combo.setCurrentIndex(index)
+        self.voz_combo.currentIndexChanged.connect(self._on_voz_cambiada)
+        fila2.addWidget(self.voz_combo, stretch=1)
+        menos = QPushButton("−", objectName="step")
+        menos.clicked.connect(lambda _=False: self._voz_ajustar(-10))
+        fila2.addWidget(menos)
+        self.voz_pct = QLineEdit(str(self.tts.volume), objectName="vozPct")
+        self.voz_pct.setValidator(QIntValidator(0, 100, self))
+        self.voz_pct.setFixedWidth(38)
+        self.voz_pct.setAlignment(Qt.AlignCenter)
+        self.voz_pct.editingFinished.connect(self._on_voz_editado)
+        fila2.addWidget(self.voz_pct)
+        fila2.addWidget(QLabel("%"))
+        mas = QPushButton("+", objectName="step")
+        mas.clicked.connect(lambda _=False: self._voz_ajustar(+10))
+        fila2.addWidget(mas)
+        voz.addLayout(fila2)
+
+        # ---- Arranque ----
+        arranque = self._settings_card("🚀  Arranque")
+        self.autostart_check = QCheckBox("Arrancar JARVIS al iniciar Windows")
+        self.autostart_check.setChecked(autostart.esta_activado())
+        self.autostart_check.toggled.connect(self._on_autostart)
+        arranque.addWidget(self.autostart_check)
+
+        # ---- Correo ----
+        correo = self._settings_card("📧  Correo")
+        cuenta = mail.cuenta_enlazada(self.router.config)
+        self._mail_status = QLabel(
+            f"Enlazado: {cuenta}" if cuenta else "Sin enlazar — usa una "
+            "contraseña de aplicación (Gmail/Outlook)."
+        )
+        self._mail_status.setWordWrap(True)
+        self._mail_status.setStyleSheet("color: #aeb9cc; font-size: 12px;")
+        correo.addWidget(self._mail_status)
+        self._mail_addr = QLineEdit(objectName="slotInput")
+        self._mail_addr.setPlaceholderText("tucorreo@gmail.com")
+        correo.addWidget(self._mail_addr)
+        self._mail_pass = QLineEdit(objectName="slotInput")
+        self._mail_pass.setPlaceholderText("contraseña de aplicación")
+        self._mail_pass.setEchoMode(QLineEdit.Password)
+        correo.addWidget(self._mail_pass)
+        botones = QHBoxLayout()
+        enlazar = QPushButton("Enlazar y probar", objectName="subrow")
+        enlazar.clicked.connect(self._on_mail_enlazar)
+        botones.addWidget(enlazar)
+        quitar = QPushButton("Desenlazar", objectName="subrow")
+        quitar.clicked.connect(self._on_mail_desenlazar)
+        botones.addWidget(quitar)
+        correo.addLayout(botones)
+
+    def _on_autostart(self, checked: bool) -> None:
+        from jarvis import autostart
+
+        try:
+            autostart.activar() if checked else autostart.desactivar()
+        except OSError:
+            self.hint.setText("No he podido cambiar el arranque automático.")
+
+    def _on_mail_enlazar(self) -> None:
+        address = self._mail_addr.text().strip()
+        password = self._mail_pass.text()
+        if not address or not password:
+            self._mail_status.setText("Rellena dirección y contraseña.")
+            return
+        self._mail_status.setText("⏳ Probando…")
+        from jarvis.skills import mail
+
+        threading.Thread(
+            target=lambda: self.mail_result.emit(mail.enlazar(address, password)),
+            daemon=True,
+        ).start()
+
+    def _on_mail_desenlazar(self) -> None:
+        from jarvis.skills import mail
+
+        self.mail_result.emit(mail.desenlazar())
+
+    def _on_mail_result(self, mensaje: str) -> None:
+        # recargar config en memoria para que las skills vean el cambio
+        self.router.config.update(config_module.load())
+        try:
+            self._mail_status.setText(mensaje)
+            self._mail_pass.clear()
+        except RuntimeError:
+            pass  # se cerró la vista de ajustes
 
     @staticmethod
     def _button_text(intent) -> str:
@@ -714,10 +812,6 @@ class Panel(QWidget):
     def show_near(self, ball_geometry) -> None:
         """Centrado en la pantalla donde vive la bolita, estilo lanzador."""
         # reflejar cambios hechos por comando ("desactiva la voz")
-        self.voz_check.blockSignals(True)
-        self.voz_check.setChecked(self.tts.enabled)
-        self.voz_check.blockSignals(False)
-        self.voz_pct.setText(str(self.tts.volume))
         area = self.screen().availableGeometry()
         x = area.center().x() - self.width() // 2
         y = area.top() + int(area.height() * 0.16)

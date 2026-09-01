@@ -44,6 +44,14 @@ def main() -> None:
     config = config_module.load()
     router = Router(config)
 
+    # arma los recordatorios pendientes (los perdidos avisan al arrancar)
+    try:
+        from jarvis.skills import reminders
+
+        reminders.scheduler()
+    except Exception:
+        pass
+
     from jarvis.brain import Brain
 
     brain = Brain(config, router, profile)

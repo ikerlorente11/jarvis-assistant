@@ -40,3 +40,11 @@ app_profiles:
   trabajo:
     - navegador
     - visual studio code
+
+# Feeds RSS para "las noticias": nombre → URL
+feeds:
+  El País: https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada
+  Xataka: https://www.xataka.com/feedburner.xml
+
+# Correo enlazado: address/imap van a config.local.yaml desde Ajustes;
+# la contraseña, al Almacén de credenciales de Windows (nunca a un fichero).
