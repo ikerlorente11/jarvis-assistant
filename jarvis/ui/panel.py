@@ -44,6 +44,20 @@ MAX_ITEMS = 8
 MAX_SUGGESTIONS = 7
 SUGGESTION_CUTOFF = 55
 
+# Acciones que se pintan como barra de control compacta, no como filas
+CONTROL_BARS = (
+    ("anterior", "play_pausa", "siguiente"),
+    ("volumen_bajar", "silenciar", "volumen_subir"),
+)
+CONTROL_ICONS = {
+    "anterior": "⏮",
+    "play_pausa": "⏯",
+    "siguiente": "⏭",
+    "volumen_bajar": "🔉",
+    "silenciar": "🔇",
+    "volumen_subir": "🔊",
+}
+
 STYLE = """
 QWidget#panel {
     background: #1b202b; border-radius: 16px;
@@ -81,6 +95,11 @@ QPushButton#subrow {
 }
 QPushButton#rowAux { padding: 10px 10px; text-align: center; }
 QPushButton#rowAux:hover { background: #2c374b; }
+QPushButton#ctrl {
+    background: #232b3a; color: #dbe3f0; border: none; border-radius: 10px;
+    padding: 8px; font-size: 17px; text-align: center;
+}
+QPushButton#ctrl:hover { background: #37445c; }
 QScrollArea { border: none; background: transparent; }
 QScrollBar:vertical { background: transparent; width: 8px; }
 QScrollBar::handle:vertical { background: #313c50; border-radius: 4px; min-height: 24px; }
@@ -123,6 +142,7 @@ class Panel(QWidget):
         self._busy = False
         self._placeholder = False  # la respuesta muestra el "⏳…" inicial
         self._pending_intent = None  # intent esperando su valor en la barra
+        self._current_cat = None  # grupo abierto: se vuelve a él tras la acción
         self._icons = QFileIconProvider()
         # emitir una señal Qt desde el hilo del TTS es seguro (conexión en cola)
         self.tts = TTS(router.config, on_speaking=self.speaking.emit)
@@ -256,6 +276,7 @@ class Panel(QWidget):
     def _show_categories(self) -> None:
         self._clear_rows()
         self._view = "categories"
+        self._current_cat = None
         self.hint.setText("Grupos de acciones — o escribe directamente")
         for cat_id, cat in self.router.categories.items():
             self._add_row(
@@ -266,11 +287,23 @@ class Panel(QWidget):
     def _show_category(self, cat_id: str) -> None:
         self._clear_rows()
         self._view = "category"
+        self._current_cat = cat_id
         cat = self.router.categories[cat_id]
         self.hint.setText(f"{cat['icon']} {cat['label']} — Esc para volver")
         self._add_row("←   Volver a los grupos", self._show_categories)
-        for intent in self.router.intents:
-            if intent.category != cat_id:
+        del_grupo = [i for i in self.router.intents if i.category == cat_id]
+        ids = {i.id for i in del_grupo}
+        pintados: set[str] = set()
+        for intent in del_grupo:
+            if intent.id in pintados:
+                continue
+            barra = next(
+                (b for b in CONTROL_BARS if intent.id in b and set(b) <= ids), None
+            )
+            if barra:
+                self._add_control_bar([i for j in barra
+                                       for i in del_grupo if i.id == j])
+                pintados.update(barra)
                 continue
             self._add_row(
                 self._button_text(intent),
@@ -278,6 +311,20 @@ class Panel(QWidget):
                 tooltip=intent.description,
                 kind="subrow",
             )
+
+    def _add_control_bar(self, intents) -> None:
+        """Fila de botones compactos tipo reproductor (⏮ ⏯ ⏭ / 🔉 🔇 🔊)."""
+        holder = QWidget()
+        row = QHBoxLayout(holder)
+        row.setContentsMargins(0, 2, 0, 2)
+        row.setSpacing(6)
+        for intent in intents:
+            button = QPushButton(CONTROL_ICONS.get(intent.id, "•"), objectName="ctrl")
+            button.setToolTip(intent.label + (
+                f" — {intent.description}" if intent.description else ""))
+            button.clicked.connect(lambda _=False, i=intent: self._on_intent(i))
+            row.addWidget(button, stretch=1)
+        self.rows.insertWidget(self.rows.count() - 1, holder)
 
     def _on_typing(self, text: str) -> None:
         if self._busy or self._pending_intent is not None:
@@ -291,6 +338,7 @@ class Panel(QWidget):
     def _show_suggestions(self, query: str) -> None:
         self._clear_rows()
         self._view = "suggestions"
+        self._current_cat = None
         self.hint.setText("Sugerencias — Enter para enviar tal cual")
         scored = []
         for intent in self.router.intents:
@@ -460,6 +508,8 @@ class Panel(QWidget):
             self._set_response(text=result.text)
         if result.items:
             self._show_items(result.items)
+        elif self._current_cat:  # quedarse donde estaba el usuario
+            self._show_category(self._current_cat)
         else:
             self._show_categories()
         if self.debug:
