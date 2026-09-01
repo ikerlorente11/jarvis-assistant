@@ -1,0 +1,12 @@
+# Configuración de JARVIS Assistant.
+# Lo personal/secreto va en config.local.yaml o Credential Manager (gitignored).
+
+# Perfil de hardware: auto | full | gpu-lite | cpu | minimal (docs/02 §6)
+profile: auto
+
+# Salida hablada (Piper) — activable aunque se use solo la bolita
+tts:
+  enabled: false
+
+# Ciudad por defecto para el tiempo (Open-Meteo)
+city: Bilbao

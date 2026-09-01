@@ -1,0 +1,5 @@
+# Versiones fijadas (docs/07). Ampliar por fases, no de golpe.
+# Fase 0 — gestor de perfiles de hardware
+psutil==7.2.2
+nvidia-ml-py==13.610.43
+PyYAML==6.0.3
