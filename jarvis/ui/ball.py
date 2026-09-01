@@ -26,20 +26,21 @@ COLORS = {
 class Ball(QWidget):
     clicked = Signal()
 
-    def __init__(self):
+    def __init__(self, config: dict | None = None):
         super().__init__(
             None,
             Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool,
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(SIZE, SIZE)
+        self._config = config or {}
         self._state = "idle"
         self._press_global = QPoint()
         self._press_offset = QPoint()
         self._dragging = False
         self._phase = 0.0
         self._pulse = QTimer(self, interval=50, timeout=self._tick)
-        self._to_corner()
+        self._restore_position()
 
     # -- estado --------------------------------------------------------------
 
@@ -87,13 +88,32 @@ class Ball(QWidget):
                 self.move(pos - self._press_offset)
 
     def mouseReleaseEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton and not self._dragging:
-            self.clicked.emit()
+        if event.button() == Qt.LeftButton:
+            if self._dragging:
+                self._save_position()
+            else:
+                self.clicked.emit()
 
     # -- interno -------------------------------------------------------------
 
-    def _to_corner(self) -> None:
-        """Esquina inferior derecha del monitor primario."""
+    def _save_position(self) -> None:
+        from jarvis import config as config_module
+
+        pos = self.frameGeometry().topLeft()
+        config_module.save_local({"ui": {"ball_pos": [pos.x(), pos.y()]}})
+
+    def _restore_position(self) -> None:
+        """La posición guardada, si sigue dentro de alguna pantalla;
+        si no, la esquina inferior derecha del monitor primario."""
+        from PySide6.QtGui import QGuiApplication
+
+        guardada = (self._config.get("ui", {}) or {}).get("ball_pos")
+        if isinstance(guardada, (list, tuple)) and len(guardada) == 2:
+            x, y = int(guardada[0]), int(guardada[1])
+            for screen in QGuiApplication.screens():
+                if screen.availableGeometry().adjusted(0, 0, -SIZE, -SIZE).contains(x, y):
+                    self.move(x, y)
+                    return
         area = self.screen().availableGeometry()
         margin = 24
         self.move(

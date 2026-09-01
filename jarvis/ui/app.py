@@ -17,7 +17,7 @@ def run(router: Router, brain=None, debug: bool = False) -> int:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)  # ocultar el panel no cierra el programa
 
-    ball = Ball()
+    ball = Ball(router.config)
     panel = Panel(router, debug=debug, brain=brain)
 
     def toggle_panel() -> None:

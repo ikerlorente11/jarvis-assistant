@@ -38,6 +38,7 @@ from rapidfuzz import fuzz
 from jarvis import config as config_module
 from jarvis.audio.tts import TTS
 from jarvis.router import Result, Router
+from jarvis.ui import theme
 
 WIDTH = 480
 HEIGHT = 580
@@ -54,90 +55,6 @@ GLYPH_VOLUME = chr(0xE767)
 GLYPH_MUTE = chr(0xE74F)
 CONSOLE_IDS = {"anterior", "play_pausa", "siguiente"}  # activa el mando
 
-STYLE = """
-QWidget#panel {
-    background: #1b202b; border-radius: 16px;
-    border: 1px solid #2e3746;
-}
-QLabel { color: #e8ecf4; }
-QLabel#hint { color: #66738a; font-size: 12px; padding-left: 4px; }
-QLabel#latency { color: #66738a; font-size: 11px; padding-left: 4px; }
-QLineEdit#search {
-    background: #232b3a; color: #f0f4fb; border: 1px solid #313c50;
-    border-radius: 12px; padding: 12px 16px; font-size: 16px;
-}
-QLineEdit#search:focus { border: 1px solid #3f7cff; }
-QLineEdit#search:disabled { color: #66738a; background: #1e2531; }
-QWidget#slotBox { background: #1f2a3f; border-radius: 12px; }
-QLabel#slotLabel { color: #9db8e8; font-size: 12px; padding: 2px 4px; }
-QLineEdit#slotInput {
-    background: #232b3a; color: #f0f4fb; border: 1px solid #3f7cff;
-    border-radius: 10px; padding: 9px 12px; font-size: 14px;
-}
-QTextEdit#response {
-    background: #232b3a; color: #e8ecf4; border: none;
-    border-radius: 12px; padding: 8px; font-size: 13px;
-}
-QPushButton#row, QPushButton#subrow, QPushButton#rowAux {
-    background: transparent; color: #dbe3f0; border: none;
-    border-radius: 10px; padding: 10px 12px; text-align: left; font-size: 14px;
-}
-QPushButton#row:hover, QPushButton#subrow:hover {
-    background: #2c374b; color: #ffffff;
-}
-QPushButton#subrow {
-    padding: 8px 12px 8px 38px; font-size: 13px; color: #c3cddd;
-    background: #202836; border-radius: 8px;
-}
-QPushButton#rowAux { padding: 10px 10px; text-align: center; }
-QPushButton#rowAux:hover { background: #2c374b; }
-QWidget#console { background: #202836; border-radius: 12px; }
-QPushButton#ctrl {
-    background: #2a3444; color: #dbe3f0; border: none; border-radius: 18px;
-    min-width: 36px; max-width: 44px; min-height: 36px; text-align: center;
-}
-QPushButton#ctrl:hover { background: #3f7cff; color: #ffffff; }
-QPushButton#step {
-    background: #232b3a; color: #dbe3f0; border: none; border-radius: 8px;
-    min-width: 24px; max-width: 24px; min-height: 24px; font-size: 14px;
-    text-align: center; padding: 0;
-}
-QPushButton#step:hover { background: #37445c; }
-QPushButton#action {
-    background: #2a3444; color: #dbe3f0; border: none; border-radius: 8px;
-    padding: 7px 14px; font-size: 12px; text-align: center;
-}
-QPushButton#action:hover { background: #3f7cff; color: #ffffff; }
-QKeySequenceEdit {
-    background: #232b3a; color: #dbe3f0; border: 1px solid #313c50;
-    border-radius: 8px; padding: 4px 8px; font-size: 12px;
-}
-QLineEdit#vozPct {
-    background: #232b3a; color: #dbe3f0; border: 1px solid #313c50;
-    border-radius: 8px; padding: 2px; font-size: 12px;
-}
-QLineEdit#vozPct:focus { border: 1px solid #3f7cff; }
-QScrollArea { border: none; background: transparent; }
-QScrollBar:vertical { background: transparent; width: 8px; }
-QScrollBar::handle:vertical { background: #313c50; border-radius: 4px; min-height: 24px; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QCheckBox { color: #aeb9cc; font-size: 12px; }
-QComboBox {
-    background: #232b3a; color: #dbe3f0; border: 1px solid #313c50;
-    border-radius: 8px; padding: 4px 10px; font-size: 12px;
-}
-QComboBox::drop-down { border: none; width: 18px; }
-QComboBox QAbstractItemView {
-    background: #232b3a; color: #dbe3f0; border: 1px solid #313c50;
-    selection-background-color: #2c374b;
-}
-QSlider::groove:horizontal { height: 4px; background: #2a3342; border-radius: 2px; }
-QSlider::handle:horizontal {
-    width: 12px; margin: -5px 0; background: #8fa3c4; border-radius: 6px;
-}
-QSlider::sub-page:horizontal { background: #3f7cff; border-radius: 2px; }
-QToolTip { background: #141922; color: #e8ecf4; border: 1px solid #37445c; }
-"""
 
 
 class Panel(QWidget):
@@ -176,11 +93,19 @@ class Panel(QWidget):
 
     # -- construcción --------------------------------------------------------
 
+    def _theme_name(self) -> str:
+        return str((self.router.config.get("ui", {}) or {}).get("theme", "system"))
+
+    def _apply_theme(self) -> None:
+        self._frame.setStyleSheet(theme.stylesheet(self._theme_name()))
+        self._theme_effective = theme.effective(self._theme_name())
+
     def _build(self) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         frame = QWidget(objectName="panel")
-        frame.setStyleSheet(STYLE)
+        self._frame = frame
+        self._apply_theme()
         outer.addWidget(frame)
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(16, 16, 16, 12)
@@ -534,6 +459,20 @@ class Panel(QWidget):
         self.ball_check.setChecked(bool(ui_config.get("ball", True)))
         self.ball_check.toggled.connect(self._on_ball_toggled)
         interfaz.addWidget(self.ball_check)
+        tema_fila = QHBoxLayout()
+        tema_fila.setSpacing(8)
+        tema_fila.addWidget(QLabel("Tema:"))
+        self.theme_combo = QComboBox()
+        for etiqueta, valor in (
+            ("Como el sistema", "system"), ("Oscuro", "dark"), ("Claro", "light")
+        ):
+            self.theme_combo.addItem(etiqueta, valor)
+        indice_tema = self.theme_combo.findData(self._theme_name())
+        if indice_tema >= 0:
+            self.theme_combo.setCurrentIndex(indice_tema)
+        self.theme_combo.currentIndexChanged.connect(self._on_theme)
+        tema_fila.addWidget(self.theme_combo, stretch=1)
+        interfaz.addLayout(tema_fila)
         atajo_fila = QHBoxLayout()
         atajo_fila.setSpacing(8)
         atajo_fila.addWidget(QLabel("Abrir con:"))
@@ -590,6 +529,14 @@ class Panel(QWidget):
         enlazar.clicked.connect(self._on_mail_enlazar)
         botones.addWidget(enlazar)
         correo.addLayout(botones)
+
+    def _on_theme(self, index: int) -> None:
+        valor = self.theme_combo.itemData(index)
+        if not valor:
+            return
+        config_module.save_local({"ui": {"theme": valor}})
+        self.router.config.setdefault("ui", {})["theme"] = valor
+        self._apply_theme()
 
     def _on_ball_toggled(self, checked: bool) -> None:
         config_module.save_local({"ui": {"ball": checked}})
@@ -755,6 +702,7 @@ class Panel(QWidget):
     def _set_response(self, text: str | None = None, html: str | None = None) -> None:
         """Pinta la respuesta y ajusta la altura al contenido (sin hueco)."""
         if html is not None:
+            html = theme.adapt_html(html, self._theme_name())
             self.response.setHtml(f"<div align='center'>{html}</div>")
         else:
             self.response.setPlainText(text or "")
@@ -872,6 +820,9 @@ class Panel(QWidget):
     def show_near(self, ball_geometry) -> None:
         """Centrado en la pantalla donde vive la bolita, estilo lanzador."""
         # reflejar cambios hechos por comando ("desactiva la voz")
+        # el tema del sistema puede haber cambiado desde la última vez
+        if theme.effective(self._theme_name()) != self._theme_effective:
+            self._apply_theme()
         area = self.screen().availableGeometry()
         x = area.center().x() - self.width() // 2
         y = area.top() + int(area.height() * 0.16)
