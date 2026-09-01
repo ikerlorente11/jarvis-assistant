@@ -64,6 +64,81 @@ def cuenta_enlazada(config: dict) -> str | None:
     return (config.get("mail") or {}).get("address") or None
 
 
+def _sesion(config: dict):
+    """→ (imap con INBOX seleccionada, None) o (None, mensaje de error)."""
+    cuenta = cuenta_enlazada(config)
+    if not cuenta:
+        return None, "No hay ningún correo enlazado — hazlo desde ⚙ Ajustes."
+    password = keyring.get_password(SERVICE, cuenta)
+    if not password:
+        return None, "No encuentro la contraseña guardada; vuelve a enlazar el correo."
+    servidor = config["mail"].get("imap") or "imap." + cuenta.split("@", 1)[1]
+    try:
+        imap = imaplib.IMAP4_SSL(servidor, timeout=10)
+        imap.login(cuenta, password)
+        imap.select("INBOX", readonly=True)
+        return imap, None
+    except (imaplib.IMAP4.error, OSError) as exc:
+        return None, f"No he podido conectar con el correo: {exc.__class__.__name__}."
+
+
+def de_remitente(config: dict, remitente: str):
+    """Busca correos de un remitente (nombre o dirección) y lista los últimos."""
+    from email.utils import parsedate_to_datetime
+
+    from jarvis.results import Rich
+
+    termino = remitente.strip()
+    try:
+        termino.encode("ascii")
+    except UnicodeEncodeError:
+        return ("La búsqueda IMAP no admite tildes: prueba con la dirección "
+                "o el nombre sin acentos.")
+    imap, error = _sesion(config)
+    if error:
+        return error
+    try:
+        _estado, datos = imap.search(None, f'(FROM "{termino}")')
+        ids = datos[0].split()
+        if not ids:
+            return f"No encuentro ningún correo de «{remitente}»."
+        _estado, sin_leer_datos = imap.search(None, f'(UNSEEN FROM "{termino}")')
+        sin_leer = set(sin_leer_datos[0].split())
+        lineas = []
+        for msg_id in ids[-5:][::-1]:
+            _estado, cabecera = imap.fetch(
+                msg_id, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])"
+            )
+            quien, asunto = _parse_cabecera(cabecera)
+            fecha = ""
+            for parte in cabecera:
+                if isinstance(parte, tuple):
+                    import email as email_lib
+
+                    crudo = email_lib.message_from_bytes(parte[1]).get("Date")
+                    if crudo:
+                        try:
+                            fecha = f"{parsedate_to_datetime(crudo):%d/%m} · "
+                        except (TypeError, ValueError):
+                            pass
+            marca = "🔵 " if msg_id in sin_leer else ""
+            lineas.append(f"• {marca}{fecha}{asunto}")
+    finally:
+        try:
+            imap.logout()
+        except Exception:
+            pass
+
+    total, nuevos = len(ids), len(sin_leer)
+    resumen_nuevos = f", {nuevos} sin leer" if nuevos else ""
+    texto = (f"{total} correo{'s' if total != 1 else ''} de «{remitente}»"
+             f"{resumen_nuevos}. Los últimos:\n" + "\n".join(lineas))
+    hablado = (f"Tienes {total} correo{'s' if total != 1 else ''} de {remitente}"
+               f"{resumen_nuevos}. El más reciente: "
+               + lineas[0].split("· ")[-1].removeprefix("• "))
+    return Rich(texto, speak=hablado)
+
+
 def leer(config: dict):
     from jarvis.results import Rich
 

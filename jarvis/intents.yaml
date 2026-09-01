@@ -248,3 +248,13 @@ categories:
           - "de qué trata el último correo"
           - "lee mi último correo"
         skill: mail.ultimo
+      - id: correo_de
+        label: "Correos de… {remitente}"
+        description: "Busca correos de un remitente (nombre o dirección) y lista los últimos, marcando los no leídos."
+        patterns:
+          - "tengo algún correo de {remitente}"
+          - "tengo correos de {remitente}"
+          - "hay correo de {remitente}"
+          - "busca correos de {remitente}"
+          - "correos de {remitente}"
+        skill: mail.de_remitente
