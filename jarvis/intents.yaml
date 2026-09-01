@@ -2,11 +2,13 @@
 # de la bolita. Skill nueva = entrada aquí + módulo en jarvis/skills/.
 #
 # Formato de cada intent:
-#   id:       único, estable (lo usa la UI para dispatch directo)
-#   label:    texto del menú; con {slot} se pide el valor al usuario
-#   patterns: frases para el matching (regex si llevan {slot}, fuzzy si no)
-#   skill:    modulo.funcion dentro de jarvis/skills/
-#   params:   argumentos fijos opcionales; el {slot} llega como argumento extra
+#   id:           único, estable (lo usa la UI para dispatch directo)
+#   label:        texto del menú; con {slot} se pide el valor al usuario
+#   description:  qué hace — tooltip del botón y texto del diálogo del slot
+#   patterns:     frases para el matching (regex si llevan {slot}, fuzzy si no)
+#   skill:        modulo.funcion dentro de jarvis/skills/
+#   params:       argumentos fijos opcionales; el {slot} llega como argumento extra
+#   options_from: clave de config.yaml cuyas claves se ofrecen como opciones
 
 categories:
   informacion:
@@ -14,22 +16,36 @@ categories:
     intents:
       - id: hora
         label: "¿Qué hora es?"
+        description: "Dice la hora actual."
         patterns: ["qué hora es", "dime la hora", "la hora"]
         skill: datetime_info.hora
       - id: fecha
         label: "¿Qué día es hoy?"
+        description: "Dice el día de la semana y la fecha."
         patterns: ["qué día es hoy", "qué fecha es", "dime la fecha"]
         skill: datetime_info.fecha
       - id: tiempo
         label: "¿Qué tiempo hace?"
+        description: "Tiempo actual en tu ciudad (detectada por IP, o `city` de config.yaml)."
         patterns: ["qué tiempo hace", "qué tal tiempo hace", "el tiempo", "va a llover"]
         skill: weather.hoy
       - id: tiempo_ciudad
         label: "Tiempo en… {ciudad}"
+        description: "Tiempo actual en la ciudad que digas."
         patterns: ["qué tiempo hace en {ciudad}", "tiempo en {ciudad}"]
         skill: weather.hoy
+      - id: tiempo_prevision
+        label: "Previsión de… {dias} días"
+        description: "Previsión diaria (mín-máx, cielo y lluvia). ¿Cuántos días? (1-14)"
+        patterns:
+          - "previsión de {dias} días"
+          - "previsión para {dias} días"
+          - "tiempo para los próximos {dias} días"
+          - "qué tiempo hará estos {dias} días"
+        skill: weather.prevision
       - id: bateria
         label: "Batería"
+        description: "Nivel de batería y tiempo restante estimado."
         patterns: ["cuánta batería queda", "batería", "nivel de batería"]
         skill: system.bateria
 
@@ -38,19 +54,24 @@ categories:
     intents:
       - id: abrir_programa
         label: "Abrir programa: {app}"
+        description: "Abre un programa instalado; no hace falta el nombre exacto (busca por aproximación)."
         patterns: ["abre {app}", "abrir {app}", "ábreme {app}", "abre el {app}", "abre la {app}"]
         skill: apps.abrir
       - id: abrir_navegador
         label: "Abrir el navegador"
+        description: "Abre tu navegador predeterminado."
         patterns: ["abre el navegador", "abrir navegador"]
         skill: apps.abrir
         params: { app: navegador }
       - id: abrir_web
         label: "Abrir web: {url}"
+        description: "Abre una dirección web (ej.: youtube.com) o un alias de `sites` en config.yaml."
         patterns: ["abre la web {url}", "abre la página {url}", "ve a {url}", "entra en {url}"]
         skill: web.abrir
       - id: modo
         label: "Activar modo: {perfil}"
+        description: "Abre de golpe los programas de un perfil (definidos en `app_profiles` de config.yaml)."
+        options_from: app_profiles
         patterns: ["modo {perfil}", "activa el modo {perfil}", "ponte en modo {perfil}"]
         skill: apps.modo
 
@@ -59,19 +80,24 @@ categories:
     intents:
       - id: abrir_carpeta
         label: "Abrir carpeta: {carpeta}"
+        description: "Abre una carpeta por nombre: estándar (descargas…), alias de config, o la busca con Everything."
+        options_from: folders
         patterns: ["abre la carpeta {carpeta}", "abrir carpeta {carpeta}", "abre la carpeta de {carpeta}"]
         skill: folders.abrir
       - id: abrir_descargas
         label: "Abrir Descargas"
+        description: "Abre tu carpeta de Descargas."
         patterns: ["abre descargas", "abre las descargas"]
         skill: folders.abrir
         params: { carpeta: descargas }
       - id: buscar_archivo
         label: "Buscar archivo: {texto}"
+        description: "Busca archivos y carpetas por nombre con Everything (instantáneo) y lista los primeros."
         patterns: ["busca {texto}", "busca el archivo {texto}", "encuentra {texto}"]
         skill: files.buscar
       - id: abrir_archivo
         label: "Abrir archivo: {texto}"
+        description: "Busca un archivo por nombre y abre directamente el que mejor encaje."
         patterns: ["abre el archivo {texto}", "abre el fichero {texto}"]
         skill: files.abrir
 
@@ -80,38 +106,47 @@ categories:
     intents:
       - id: volumen_subir
         label: "Subir volumen"
+        description: "Sube el volumen un 10%."
         patterns: ["sube el volumen", "más volumen", "sube volumen"]
         skill: system.volumen_subir
       - id: volumen_bajar
         label: "Bajar volumen"
+        description: "Baja el volumen un 10%."
         patterns: ["baja el volumen", "menos volumen", "baja volumen"]
         skill: system.volumen_bajar
       - id: volumen_poner
         label: "Volumen al… {nivel}"
+        description: "Pone el volumen a un porcentaje exacto (0-100)."
         patterns: ["volumen al {nivel}", "pon el volumen al {nivel}"]
         skill: system.volumen_poner
       - id: silenciar
         label: "Silenciar / activar sonido"
+        description: "Alterna el silencio del sistema."
         patterns: ["silencio", "silénciate", "mute", "activa el sonido", "quita el silencio"]
         skill: system.silenciar
       - id: play_pausa
         label: "Play / pausa"
+        description: "Pulsa la tecla multimedia play/pausa (Spotify, YouTube…)."
         patterns: ["pausa", "play", "reproduce", "para la música", "reanuda"]
         skill: media.play_pausa
       - id: siguiente
         label: "Siguiente canción"
+        description: "Pasa a la siguiente pista del reproductor activo."
         patterns: ["siguiente", "siguiente canción", "pasa la canción"]
         skill: media.siguiente
       - id: anterior
         label: "Canción anterior"
+        description: "Vuelve a la pista anterior del reproductor activo."
         patterns: ["anterior", "canción anterior", "vuelve a la canción"]
         skill: media.anterior
       - id: captura
         label: "Captura de pantalla"
+        description: "Captura todos los monitores y la guarda en Imágenes\\Capturas."
         patterns: ["haz una captura", "captura de pantalla", "pantallazo"]
         skill: system.captura
       - id: minimizar
         label: "Minimizar todo"
+        description: "Minimiza todas las ventanas y muestra el escritorio."
         patterns: ["minimiza todo", "minimiza las ventanas", "enséñame el escritorio"]
         skill: system.minimizar_todo
 
@@ -120,17 +155,21 @@ categories:
     intents:
       - id: timer
         label: "Avísame en… {tiempo}"
+        description: "Temporizador con notificación de Windows. Ej.: 10 minutos, 30 segundos, 1 hora."
         patterns: ["avísame en {tiempo}", "temporizador de {tiempo}", "pon un temporizador de {tiempo}"]
         skill: timers.crear
       - id: nota_crear
         label: "Apuntar nota: {texto}"
+        description: "Añade una nota con fecha a Documentos\\notas-jarvis.md."
         patterns: ["apunta {texto}", "apunta que {texto}", "toma nota de {texto}"]
         skill: notes.crear
       - id: nota_leer
         label: "Leer mis notas"
+        description: "Muestra las últimas 5 notas apuntadas."
         patterns: ["lee mis notas", "qué notas tengo", "mis notas"]
         skill: notes.leer
       - id: portapapeles
         label: "Leer el portapapeles"
+        description: "Muestra lo último que has copiado."
         patterns: ["lee el portapapeles", "qué he copiado", "lee lo que he copiado"]
         skill: clipboard.leer

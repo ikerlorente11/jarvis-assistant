@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -30,8 +31,12 @@ STYLE = """
 QWidget#panel { background: #1e2430; border-radius: 12px; }
 QLabel { color: #e8ecf4; }
 QLabel#category { color: #8fa3c4; font-weight: bold; padding-top: 6px; }
-QLabel#response { background: #141922; border-radius: 8px; padding: 8px; }
+QTextEdit#response {
+    background: #141922; color: #e8ecf4; border: none;
+    border-radius: 8px; padding: 6px; font-size: 12px;
+}
 QLabel#latency { color: #66738a; font-size: 11px; }
+QToolTip { background: #141922; color: #e8ecf4; border: 1px solid #37445c; }
 QPushButton {
     background: #2a3342; color: #e8ecf4; border: none;
     border-radius: 8px; padding: 7px 10px; text-align: left;
@@ -86,6 +91,8 @@ class Panel(QWidget):
                 if intent.category != cat_id:
                     continue
                 button = QPushButton(self._button_text(intent))
+                if intent.description:
+                    button.setToolTip(intent.description)
                 button.clicked.connect(
                     lambda _=False, i=intent: self._on_intent(i)
                 )
@@ -101,8 +108,11 @@ class Panel(QWidget):
         self.input.returnPressed.connect(self._on_text)
         layout.addWidget(self.input)
 
-        self.response = QLabel("", objectName="response")
-        self.response.setWordWrap(True)
+        self.response = QTextEdit(objectName="response")
+        self.response.setReadOnly(True)  # seleccionable y con scroll
+        self.response.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.response.setMinimumHeight(60)
+        self.response.setMaximumHeight(150)
         self.response.hide()
         layout.addWidget(self.response)
 
@@ -126,9 +136,18 @@ class Panel(QWidget):
     def _on_intent(self, intent) -> None:
         slot_value = None
         if intent.slot:
-            slot_value, ok = QInputDialog.getText(
-                self, "JARVIS", f"¿Qué {intent.slot}?"
-            )
+            prompt = intent.description or f"¿Qué {intent.slot}?"
+            if intent.options_from:
+                # Las opciones salen de config.yaml (p. ej. app_profiles);
+                # editable: también se puede escribir otra cosa.
+                opciones = list(
+                    self.router.config.get(intent.options_from, {}).keys()
+                )
+                slot_value, ok = QInputDialog.getItem(
+                    self, "JARVIS", prompt, opciones, 0, True
+                )
+            else:
+                slot_value, ok = QInputDialog.getText(self, "JARVIS", prompt)
             if not ok or not slot_value.strip():
                 return
         self.working.emit(True)
@@ -147,7 +166,7 @@ class Panel(QWidget):
         self.input.clear()
 
     def _show(self, result: Result) -> None:
-        self.response.setText(result.text)
+        self.response.setPlainText(result.text)
         self.response.show()
         if self.debug:
             self.latency.setText(

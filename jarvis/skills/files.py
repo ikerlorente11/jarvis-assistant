@@ -35,6 +35,7 @@ def everything(config: dict, query: str, max_results: int = 10) -> list[str] | N
         capture_output=True,
         text=True,
         timeout=10,
+        creationflags=subprocess.CREATE_NO_WINDOW,  # sin parpadeo de consola
     )
     if completed.returncode != 0:
         return []

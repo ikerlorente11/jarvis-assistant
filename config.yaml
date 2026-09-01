@@ -8,8 +8,9 @@ profile: auto
 tts:
   enabled: false
 
-# Ciudad por defecto para el tiempo (Open-Meteo)
-city: Bilbao
+# Ciudad para el tiempo (Open-Meteo). "auto" = detectar por IP;
+# escribe un nombre de ciudad para fijarla.
+city: auto
 
 # Alias de programas: lo que dices → comando/ejecutable
 apps:

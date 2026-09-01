@@ -47,6 +47,8 @@ class Intent:
     skill: str  # "modulo.funcion"
     patterns: tuple[str, ...]
     params: dict = field(default_factory=dict)
+    description: str = ""  # tooltip del menú y texto del diálogo del slot
+    options_from: str | None = None  # clave de config cuyas claves son opciones
 
     @property
     def slot(self) -> str | None:
@@ -84,6 +86,8 @@ class Router:
                         skill=entry["skill"],
                         patterns=tuple(entry["patterns"]),
                         params=entry.get("params", {}),
+                        description=entry.get("description", ""),
+                        options_from=entry.get("options_from"),
                     )
                 )
 
