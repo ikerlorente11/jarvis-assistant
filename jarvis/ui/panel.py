@@ -85,6 +85,8 @@ class Panel(QWidget):
         # emitir una señal Qt desde el hilo del TTS es seguro (conexión en cola)
         self.tts = TTS(router.config, on_speaking=self.speaking.emit)
         router.config["_tts"] = self.tts  # para las skills de voz
+        self._busy_label = ""
+        self._busy_timer = QTimer(self, interval=400, timeout=self._busy_tick)
         self._build()
         self.fast_done.connect(self._on_fast_done)
         self.token.connect(self._on_token)
@@ -704,14 +706,28 @@ class Panel(QWidget):
     # -- feedback ------------------------------------------------------------
 
     def _start_busy(self, label: str, quiet: bool = False) -> None:
-        """Feedback inmediato: se ve al instante que está en ello."""
+        """Feedback inmediato y vivo: puntos animados + segundos, que nunca
+        parezca que se ha quedado colgado."""
         self._busy = True
         self._t0 = time.perf_counter()
         self.working.emit(True)
         if not quiet:
             self._placeholder = True
+            self._busy_label = label
             self._set_response(text=f"⏳ {label}…")
+            self._busy_timer.start()
             self.latency.hide()  # la lista NO se toca: sin parpadeos
+
+    def _busy_tick(self) -> None:
+        if not (self._busy and self._placeholder):
+            self._busy_timer.stop()
+            return
+        transcurrido = time.perf_counter() - self._t0
+        puntos = "." * (1 + int(transcurrido * 2.5) % 3)
+        texto = f"⏳ {self._busy_label}{puntos}"
+        if transcurrido >= 3:
+            texto += f"   ({transcurrido:.0f} s — sigo en ello)"
+        self.response.setPlainText(texto)
 
     def _set_response(self, text: str | None = None, html: str | None = None) -> None:
         """Pinta la respuesta y ajusta la altura al contenido (sin hueco)."""
@@ -730,6 +746,7 @@ class Panel(QWidget):
     def _on_fast_done(self, result: Result) -> None:
         self._busy = False
         self._placeholder = False
+        self._busy_timer.stop()
         self.working.emit(False)
         if self._quiet:
             self._quiet = False
@@ -757,6 +774,7 @@ class Panel(QWidget):
 
     def _on_token(self, token: str) -> None:
         if self._placeholder:
+            self._busy_timer.stop()
             self.response.setPlainText("")
             self._placeholder = False
         cursor = self.response.textCursor()
@@ -769,6 +787,7 @@ class Panel(QWidget):
     def _on_llm_done(self, full: str, elapsed_ms: float) -> None:
         self._busy = False
         self._placeholder = False
+        self._busy_timer.stop()
         self.working.emit(False)
         self._show_categories()
         if self.debug:

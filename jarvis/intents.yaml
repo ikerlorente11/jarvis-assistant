@@ -306,6 +306,17 @@ categories:
           - "escribe un correo {peticion}"
           - "envía un email {peticion}"
         skill: mail.redactar
+      - id: correo_enviarme
+        label: "Enviarme un correo: {peticion}"
+        hidden: true
+        description: "Redacta y envía un correo a la propia cuenta enlazada del usuario (recordatorios, notas, enlaces…)."
+        patterns:
+          - "envíame un correo {peticion}"
+          - "mándame un correo {peticion}"
+          - "envíame un email {peticion}"
+          - "mándame un email {peticion}"
+        skill: mail.redactar
+        params: { para_mi: "si" }
       - id: correo_confirmar
         label: "Confirmar envío"
         hidden: true

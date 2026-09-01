@@ -244,7 +244,7 @@ def ultimo(config: dict):
     )
 
 
-def redactar(config: dict, peticion: str):
+def redactar(config: dict, peticion: str, para_mi: str = ""):
     """El LLM redacta un borrador a partir de la petición; NUNCA se envía
     sin que el usuario lo revise y confirme."""
     import re
@@ -256,9 +256,17 @@ def redactar(config: dict, peticion: str):
     if not cuenta:
         return "No hay ningún correo enlazado — hazlo desde ⚙ Ajustes."
 
-    # destinatario: dirección literal en la petición, o alias de contacts
-    match = re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", peticion)
-    para = match.group(0) if match else None
+    # destinatario: "a mí mismo"/"envíame" → la cuenta enlazada;
+    # si no, dirección literal en la petición o alias de contacts
+    para = None
+    if para_mi or re.search(
+        r"\b(a mi mism[oa]|mi mism[oa]|para mi|a mi correo|mi correo|"
+        r"mi direccion|mi dirección)\b", peticion, re.IGNORECASE
+    ):
+        para = cuenta
+    if para is None:
+        match = re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", peticion)
+        para = match.group(0) if match else None
     if para is None:
         contactos = config.get("contacts") or {}
         for nombre, direccion in contactos.items():
@@ -266,9 +274,9 @@ def redactar(config: dict, peticion: str):
                 para = direccion
                 break
     if para is None:
-        return ("No sé la dirección del destinatario: dila en la petición "
-                "(«…a nombre@dominio.com») o añade el contacto a `contacts` "
-                "en config.yaml.")
+        return ("No sé la dirección del destinatario: di «a mí mismo», una "
+                "dirección («…a nombre@dominio.com») o un contacto guardado "
+                "(«añade el contacto Nombre -> correo»).")
 
     brain = config.get("_brain")
     if brain is None:
