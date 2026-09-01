@@ -40,14 +40,28 @@ def abrir(config: dict, app: str) -> str:
         os.startfile(exe)
         return "Abriendo el navegador."
 
-    # Fuzzy sobre lo instalado: tolera errores de escritura.
+    # Fuzzy sobre lo instalado: tolera errores de escritura. Con un match
+    # claro se abre; con varios dudosos se ofrece elegir.
+    from jarvis.results import Item, Rich
+
     indice = _installed_apps()
-    match = process.extractOne(
-        objetivo, list(indice.keys()), scorer=fuzz.WRatio, score_cutoff=FUZZY_CUTOFF
+    candidatos = process.extract(
+        objetivo,
+        list(indice.keys()),
+        scorer=fuzz.WRatio,
+        score_cutoff=FUZZY_CUTOFF,
+        limit=5,
     )
-    if match:
-        os.startfile(indice[match[0]])
-        return f"Abriendo {match[0]}."
+    if candidatos:
+        mejor, puntuacion = candidatos[0][0], candidatos[0][1]
+        claro = puntuacion >= 90 and (
+            len(candidatos) == 1 or candidatos[1][1] <= puntuacion - 8
+        )
+        if claro or len(candidatos) == 1:
+            os.startfile(indice[mejor])
+            return f"Abriendo {mejor}."
+        items = [Item("app", nombre, indice[nombre]) for nombre, _, _ in candidatos]
+        return Rich(f"He encontrado varios programas parecidos a «{app}», elige:", items)
 
     try:
         os.startfile(objetivo)

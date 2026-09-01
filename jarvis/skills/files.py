@@ -42,14 +42,24 @@ def everything(config: dict, query: str, max_results: int = 10) -> list[str] | N
     return [line.strip() for line in completed.stdout.splitlines() if line.strip()]
 
 
-def buscar(config: dict, texto: str) -> str:
+def buscar(config: dict, texto: str):
+    from jarvis.results import Item, Rich
+
     rutas = everything(config, texto, max_results=8)
     if rutas is None:
         return "No encuentro es.exe (Everything) para buscar."
     if not rutas:
-        return f"Nada que contenga «{texto}»."
-    lineas = "\n".join(f"• {r}" for r in rutas)
-    return f"Encontrado:\n{lineas}"
+        return f"No he encontrado nada que contenga «{texto}»."
+    items = [
+        Item(
+            kind="folder" if Path(r).is_dir() else "file",
+            label=Path(r).name,
+            path=r,
+        )
+        for r in rutas
+    ]
+    plural = "s" if len(items) != 1 else ""
+    return Rich(f"He encontrado {len(items)} resultado{plural}:", items)
 
 
 def abrir(config: dict, texto: str) -> str:

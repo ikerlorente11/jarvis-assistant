@@ -49,7 +49,7 @@ def bateria(config: dict) -> str:
     info = psutil.sensors_battery()
     if info is None:
         return "Este equipo no tiene batería."
-    estado = "cargando" if info.power_plugged else "descargando"
+    estado = "enchufada" if info.power_plugged else "usando batería"
     respuesta = f"Batería al {round(info.percent)}% ({estado})."
     if not info.power_plugged and info.secsleft > 0:
         horas, resto = divmod(info.secsleft, 3600)

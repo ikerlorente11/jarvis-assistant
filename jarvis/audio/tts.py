@@ -26,6 +26,7 @@ class TTS:
         self.enabled = bool(tts_config.get("enabled", False))
         self.volume = int(tts_config.get("volume", 80))  # 0-100
         self.voice_name = tts_config.get("voice", DEFAULT_VOICE)
+        self.replacements = tts_config.get("replacements", {}) or {}
         self._on_speaking = on_speaking or (lambda speaking: None)
         self._voice = None
         self._load_lock = threading.Lock()
@@ -39,7 +40,10 @@ class TTS:
 
     def speak(self, text: str) -> None:
         """Encola el texto (si está activado); descarta lo pendiente."""
-        if not self.enabled or not text.strip():
+        from jarvis.audio.speech_text import normalizar
+
+        text = normalizar(text, self.replacements)
+        if not self.enabled or not text:
             return
         while not self._queue.empty():
             try:

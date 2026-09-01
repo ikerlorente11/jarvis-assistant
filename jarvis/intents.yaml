@@ -1,4 +1,4 @@
-# Catálogo de intents (docs/01): alimenta el router fast path Y los menús
+﻿# Catálogo de intents (docs/01): alimenta el router fast path Y los menús
 # de la bolita. Skill nueva = entrada aquí + módulo en jarvis/skills/.
 #
 # Formato de cada intent:
@@ -13,6 +13,7 @@
 categories:
   informacion:
     label: Información
+    icon: "💡"
     intents:
       - id: hora
         label: "¿Qué hora es?"
@@ -51,6 +52,7 @@ categories:
 
   programas:
     label: Programas
+    icon: "🚀"
     intents:
       - id: abrir_programa
         label: "Abrir programa: {app}"
@@ -77,6 +79,7 @@ categories:
 
   archivos:
     label: Archivos
+    icon: "📁"
     intents:
       - id: abrir_carpeta
         label: "Abrir carpeta: {carpeta}"
@@ -103,6 +106,7 @@ categories:
 
   sistema:
     label: Sistema
+    icon: "⚙️"
     intents:
       - id: volumen_subir
         label: "Subir volumen"
@@ -167,6 +171,7 @@ categories:
 
   productividad:
     label: Productividad
+    icon: "📝"
     intents:
       - id: timer
         label: "Avísame en… {tiempo}"

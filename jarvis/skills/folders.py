@@ -47,22 +47,27 @@ def abrir(config: dict, carpeta: str) -> str:
 
     # 3. Everything: carpetas cuyo nombre contenga lo pedido. Ventana amplia:
     # con pocas, la carpeta de nombre exacto puede quedarse fuera.
+    from jarvis.results import Item, Rich
+
     rutas = everything(config, f"folder:{nombre}", max_results=200)
     if rutas is None:
         return "No encuentro es.exe (Everything) para buscar carpetas."
     rutas = [r for r in rutas if Path(r).is_dir()]
     if not rutas:
         return f"No he encontrado ninguna carpeta «{carpeta}»."
-    mejor = _mejor_carpeta(nombre, rutas)
-    os.startfile(mejor)
-    return f"Abriendo {mejor}."
+
+    ordenadas = sorted(rutas, key=lambda r: _clave_carpeta(nombre, r))
+    mejor = ordenadas[0]
+    # Nombre clavado → se abre directa; si no, mejor preguntar que adivinar.
+    if Path(mejor).name.lower() == nombre:
+        os.startfile(mejor)
+        return f"Abriendo {Path(mejor).name}."
+    items = [Item("folder", Path(r).name, r) for r in ordenadas[:6]]
+    return Rich(f"He encontrado {len(items)} carpetas parecidas, elige:", items)
 
 
-def _mejor_carpeta(nombre: str, rutas: list[str]) -> str:
-    """Mejor candidata: nombre más parecido; a igualdad, ruta menos profunda
-    (C:/Proyectos gana a C:/x/y/z/Proyectos-backup)."""
-    def clave(ruta: str) -> tuple:
-        similitud = fuzz.WRatio(nombre, Path(ruta).name.lower())
-        return (-similitud, ruta.count(os.sep), len(ruta))
-
-    return min(rutas, key=clave)
+def _clave_carpeta(nombre: str, ruta: str) -> tuple:
+    """Orden de candidatas: nombre más parecido; a igualdad, ruta menos
+    profunda (C:/Proyectos gana a C:/x/y/z/Proyectos-backup)."""
+    similitud = fuzz.WRatio(nombre, Path(ruta).name.lower())
+    return (-similitud, ruta.count(os.sep), len(ruta))

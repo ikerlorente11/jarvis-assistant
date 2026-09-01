@@ -63,6 +63,7 @@ class Result:
     matched: bool  # False → candidato a slow path (LLM)
     intent_id: str | None
     elapsed_ms: float
+    items: tuple = ()  # elementos clicables (jarvis.results.Item)
 
 
 class Router:
@@ -76,7 +77,10 @@ class Router:
     def _load_catalog(self) -> None:
         catalog = yaml.safe_load(INTENTS_PATH.read_text(encoding="utf-8"))
         for cat_id, cat in catalog["categories"].items():
-            self.categories[cat_id] = cat["label"]
+            self.categories[cat_id] = {
+                "label": cat["label"],
+                "icon": cat.get("icon", ""),
+            }
             for entry in cat["intents"]:
                 self.intents.append(
                     Intent(
@@ -159,14 +163,21 @@ class Router:
     # -- interno -------------------------------------------------------------
 
     def _run(self, intent: Intent, extra: dict, start: float) -> Result:
+        from jarvis.results import Rich
+
         module_name, func_name = intent.skill.rsplit(".", 1)
         module = importlib.import_module(f"jarvis.skills.{module_name}")
         func = getattr(module, func_name)
+        items: tuple = ()
         try:
-            text = func(config=self.config, **intent.params, **extra)
+            ret = func(config=self.config, **intent.params, **extra)
+            if isinstance(ret, Rich):
+                text, items = ret.text, tuple(ret.items)
+            else:
+                text = ret
         except Exception as exc:  # una skill rota no debe tumbar el asistente
             text = f"Error en la skill {intent.skill}: {exc}"
-        return Result(text, True, intent.id, _ms(start))
+        return Result(text, True, intent.id, _ms(start), items)
 
 
 def _ms(start: float) -> float:

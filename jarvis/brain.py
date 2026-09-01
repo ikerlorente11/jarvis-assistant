@@ -171,7 +171,11 @@ class Brain:
             slot_value = str(args.get(intent.slot, "")).strip() or None
             if slot_value is None:
                 return f"Error: falta el argumento {intent.slot}."
-        return self.router.run_intent(intent.id, slot_value).text
+        result = self.router.run_intent(intent.id, slot_value)
+        text = result.text
+        if result.items:
+            text += " " + "; ".join(i.label for i in result.items[:8])
+        return text
 
     def _build_tools(self) -> list[dict]:
         """Un tool por intent del catálogo; el {slot} es su único parámetro."""
