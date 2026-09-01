@@ -45,16 +45,26 @@ def silenciar(config: dict) -> str:
     return "Silenciado." if mute else "Sonido activado."
 
 
-def bateria(config: dict) -> str:
+def bateria(config: dict):
+    from jarvis.results import Rich
+
     info = psutil.sensors_battery()
     if info is None:
         return "Este equipo no tiene batería."
+    pct = round(info.percent)
     estado = "enchufada" if info.power_plugged else "usando batería"
-    respuesta = f"Batería al {round(info.percent)}% ({estado})."
+    respuesta = f"Batería al {pct}% ({estado})."
     if not info.power_plugged and info.secsleft > 0:
         horas, resto = divmod(info.secsleft, 3600)
         respuesta += f" Quedan unas {horas} h {resto // 60} min."
-    return respuesta
+    emoji = "🔌" if info.power_plugged else ("🔋" if pct > 20 else "🪫")
+    color = "#2fae5f" if pct > 40 else ("#e8a13c" if pct > 15 else "#e05b4f")
+    html = (
+        f"<span style='font-size:26px'>{emoji}</span> "
+        f"<span style='font-size:26px;color:{color};font-weight:bold'>{pct}%</span> "
+        f"<span style='font-size:12px;color:#8fa3c4'>&nbsp;{estado}</span>"
+    )
+    return Rich(respuesta, html=html, speak=respuesta)
 
 
 def captura(config: dict) -> str:

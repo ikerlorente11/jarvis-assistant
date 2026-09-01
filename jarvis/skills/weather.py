@@ -24,6 +24,15 @@ WMO = {
 }
 
 DIAS_SEMANA = ("lun", "mar", "mié", "jue", "vie", "sáb", "dom")
+DIAS_LARGOS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+
+EMOJI = {
+    0: "☀️", 1: "🌤️", 2: "⛅", 3: "☁️", 45: "🌫️", 48: "🌫️",
+    51: "🌦️", 53: "🌦️", 55: "🌧️", 61: "🌧️", 63: "🌧️", 65: "🌧️",
+    66: "🌧️", 67: "🌧️", 71: "🌨️", 73: "🌨️", 75: "🌨️", 77: "🌨️",
+    80: "🌦️", 81: "🌧️", 82: "⛈️", 85: "🌨️", 86: "🌨️",
+    95: "⛈️", 96: "⛈️", 99: "⛈️",
+}
 
 _ubicacion_auto: dict | None = None  # caché de la detección (una por sesión)
 
@@ -48,16 +57,34 @@ def hoy(config: dict, ciudad: str | None = None) -> str:
     except requests.RequestException as exc:
         return f"No he podido consultar el tiempo: {exc.__class__.__name__}."
 
+    from jarvis.results import Rich
+
     actual = datos["current"]
     diario = datos["daily"]
-    cielo = WMO.get(actual["weather_code"], "")
-    return (
-        f"En {sitio['name']}: {round(actual['temperature_2m'])}°C"
+    codigo = actual["weather_code"]
+    cielo = WMO.get(codigo, "")
+    temp = round(actual["temperature_2m"])
+    maxima = round(diario["temperature_2m_max"][0])
+    minima = round(diario["temperature_2m_min"][0])
+    viento = round(actual["wind_speed_10m"])
+
+    texto = (
+        f"En {sitio['name']}: {temp}°C"
         + (f", {cielo}" if cielo else "")
-        + f". Máxima {round(diario['temperature_2m_max'][0])}°, "
-        f"mínima {round(diario['temperature_2m_min'][0])}°. "
-        f"Viento {round(actual['wind_speed_10m'])} km/h."
+        + f". Máxima {maxima}°, mínima {minima}°. Viento {viento} km/h."
     )
+    html = f"""
+    <table cellspacing="0" cellpadding="2"><tr>
+      <td style="font-size:36px;padding-right:10px">{EMOJI.get(codigo, "🌡️")}</td>
+      <td>
+        <span style="font-size:28px;color:#f0f4fb;font-weight:bold">{temp}°</span>
+        <span style="font-size:13px;color:#8fa3c4">&nbsp;{cielo.capitalize()}</span><br>
+        <span style="font-size:12px;color:#c3cddd">{sitio['name']}
+        &nbsp;·&nbsp; ↑&nbsp;{maxima}° &nbsp;↓&nbsp;{minima}°
+        &nbsp;·&nbsp; 💨 {viento} km/h</span>
+      </td>
+    </tr></table>"""
+    return Rich(texto, html=html, speak=texto)
 
 
 def prevision(config: dict, dias: str = "7", ciudad: str | None = None) -> str:
@@ -84,19 +111,63 @@ def prevision(config: dict, dias: str = "7", ciudad: str | None = None) -> str:
     except requests.RequestException as exc:
         return f"No he podido consultar el tiempo: {exc.__class__.__name__}."
 
+    from jarvis.results import Rich
+
     diario = datos["daily"]
     lineas = []
+    celdas = []
+    minimas, maximas, dias_lluvia = [], [], []
+    lluvias = diario.get("precipitation_probability_max")
     for i, fecha in enumerate(diario["time"]):
         dt = datetime.strptime(fecha, "%Y-%m-%d")
-        cielo = WMO.get(diario["weather_code"][i], "")
-        lluvia = diario.get("precipitation_probability_max")
-        prob = f", lluvia {lluvia[i]}%" if lluvia and lluvia[i] is not None else ""
+        codigo = diario["weather_code"][i]
+        cielo = WMO.get(codigo, "")
+        minima = round(diario["temperature_2m_min"][i])
+        maxima = round(diario["temperature_2m_max"][i])
+        minimas.append(minima)
+        maximas.append(maxima)
+        prob = lluvias[i] if lluvias and lluvias[i] is not None else 0
+        if prob >= 40:
+            dias_lluvia.append(DIAS_LARGOS[dt.weekday()])
+        prob_txt = f", lluvia {prob}%" if prob else ""
         lineas.append(
-            f"{DIAS_SEMANA[dt.weekday()]} {dt.day}: "
-            f"{round(diario['temperature_2m_min'][i])}-"
-            f"{round(diario['temperature_2m_max'][i])}°, {cielo}{prob}"
+            f"{DIAS_SEMANA[dt.weekday()]} {dt.day}: {minima}-{maxima}°, {cielo}{prob_txt}"
         )
-    return f"Previsión en {sitio['name']}:\n" + "\n".join(lineas)
+        gota = (f"<br><span style='font-size:10px;color:#6fa8ff'>💧{prob}%</span>"
+                if prob >= 20 else "")
+        celdas.append(
+            f"<td align='center' style='padding:4px 7px'>"
+            f"<span style='font-size:11px;color:#8fa3c4'>{DIAS_SEMANA[dt.weekday()]} {dt.day}</span><br>"
+            f"<span style='font-size:20px'>{EMOJI.get(codigo, '🌡️')}</span><br>"
+            f"<span style='font-size:11px;color:#f0f4fb'><b>{maxima}°</b></span>"
+            f"<span style='font-size:11px;color:#8fa3c4'> {minima}°</span>"
+            f"{gota}</td>"
+        )
+
+    # tarjeta: cabecera + filas de hasta 7 días
+    filas = "".join(
+        "<tr>" + "".join(celdas[i:i + 7]) + "</tr>" for i in range(0, len(celdas), 7)
+    )
+    html = (
+        f"<span style='font-size:13px;color:#c3cddd'>Previsión en "
+        f"<b>{sitio['name']}</b></span>"
+        f"<table cellspacing='0' cellpadding='0'>{filas}</table>"
+    )
+
+    # la voz resume, no lee la tabla entera
+    resumen = (
+        f"Previsión de {len(celdas)} días en {sitio['name']}: mínimas de "
+        f"{min(minimas)}, máximas de hasta {max(maximas)} grados. "
+    )
+    if not dias_lluvia:
+        resumen += "Sin lluvia a la vista."
+    elif len(dias_lluvia) <= 3:
+        resumen += "Lluvia probable el " + " y el ".join(dict.fromkeys(dias_lluvia)) + "."
+    else:
+        resumen += f"Lluvia probable en {len(dias_lluvia)} de los días."
+
+    texto = f"Previsión en {sitio['name']}:\n" + "\n".join(lineas)
+    return Rich(texto, html=html, speak=resumen)
 
 
 def _geolocalizar(config: dict, ciudad: str | None) -> dict | str:

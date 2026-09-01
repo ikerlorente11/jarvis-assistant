@@ -64,6 +64,8 @@ class Result:
     intent_id: str | None
     elapsed_ms: float
     items: tuple = ()  # elementos clicables (jarvis.results.Item)
+    html: str | None = None  # tarjeta visual
+    speak: str | None = None  # resumen para la voz
 
 
 class Router:
@@ -169,15 +171,17 @@ class Router:
         module = importlib.import_module(f"jarvis.skills.{module_name}")
         func = getattr(module, func_name)
         items: tuple = ()
+        html = speak = None
         try:
             ret = func(config=self.config, **intent.params, **extra)
             if isinstance(ret, Rich):
                 text, items = ret.text, tuple(ret.items)
+                html, speak = ret.html, ret.speak
             else:
                 text = ret
         except Exception as exc:  # una skill rota no debe tumbar el asistente
             text = f"Error en la skill {intent.skill}: {exc}"
-        return Result(text, True, intent.id, _ms(start), items)
+        return Result(text, True, intent.id, _ms(start), items, html, speak)
 
 
 def _ms(start: float) -> float:

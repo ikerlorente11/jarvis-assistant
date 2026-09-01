@@ -57,6 +57,13 @@ QLineEdit#search {
     border-radius: 12px; padding: 12px 16px; font-size: 16px;
 }
 QLineEdit#search:focus { border: 1px solid #3f7cff; }
+QLineEdit#search:disabled { color: #66738a; background: #1e2531; }
+QWidget#slotBox { background: #1f2a3f; border-radius: 12px; }
+QLabel#slotLabel { color: #9db8e8; font-size: 12px; padding: 2px 4px; }
+QLineEdit#slotInput {
+    background: #232b3a; color: #f0f4fb; border: 1px solid #3f7cff;
+    border-radius: 10px; padding: 9px 12px; font-size: 14px;
+}
 QTextEdit#response {
     background: #232b3a; color: #e8ecf4; border: none;
     border-radius: 12px; padding: 8px; font-size: 13px;
@@ -145,6 +152,23 @@ class Panel(QWidget):
 
         self.hint = QLabel("", objectName="hint")
         layout.addWidget(self.hint)
+
+        # Input independiente para pedir un valor ("¿Qué programa?"…):
+        # aparece solo en modo captura, con su propio estilo.
+        self.slot_box = QWidget(objectName="slotBox")
+        slot_layout = QVBoxLayout(self.slot_box)
+        slot_layout.setContentsMargins(10, 8, 10, 10)
+        slot_layout.setSpacing(4)
+        self.slot_label = QLabel("", objectName="slotLabel")
+        self.slot_label.setWordWrap(True)
+        slot_layout.addWidget(self.slot_label)
+        self.slot_input = QLineEdit(objectName="slotInput")
+        self.slot_input.returnPressed.connect(
+            lambda: self._submit_slot(self.slot_input.text())
+        )
+        slot_layout.addWidget(self.slot_input)
+        self.slot_box.hide()
+        layout.addWidget(self.slot_box)
 
         self.response = QTextEdit(objectName="response")
         self.response.setReadOnly(True)  # seleccionable y con scroll
@@ -330,15 +354,15 @@ class Panel(QWidget):
         self._run_intent(intent, None)
 
     def _enter_slot_mode(self, intent) -> None:
-        """El valor se pide en la propia barra, sin diálogos aparte."""
+        """El valor se pide en su propio input, bajo la barra principal."""
         self._pending_intent = intent
         self._view = "slot"
-        self.input.blockSignals(True)
-        self.input.clear()
-        self.input.blockSignals(False)
+        self.input.setEnabled(False)  # se ve claro qué input toca usar
         prompt = intent.description or f"¿Qué {intent.slot}?"
-        self.input.setPlaceholderText(f"✏️  {prompt}")
-        self.hint.setText(f"{self._button_text(intent)} — escribe y pulsa Enter, Esc cancela")
+        self.slot_label.setText(f"✏️  {self._button_text(intent)} — {prompt}")
+        self.slot_input.clear()
+        self.slot_box.show()
+        self.hint.setText("Escribe y pulsa Enter · Esc cancela")
         self._clear_rows()
         if intent.options_from:
             # Las opciones salen de config.yaml (p. ej. app_profiles);
@@ -350,7 +374,7 @@ class Panel(QWidget):
                     kind="subrow",
                 )
         self._add_row("←   Cancelar", self._cancel_slot)
-        self.input.setFocus()
+        self.slot_input.setFocus()
 
     def _submit_slot(self, value: str) -> None:
         intent = self._pending_intent
@@ -364,10 +388,10 @@ class Panel(QWidget):
 
     def _exit_slot_mode(self) -> None:
         self._pending_intent = None
-        self.input.blockSignals(True)
-        self.input.clear()
-        self.input.blockSignals(False)
-        self.input.setPlaceholderText("🔍  Pídeme algo o elige una acción…")
+        self.slot_box.hide()
+        self.slot_input.clear()
+        self.input.setEnabled(True)
+        self.input.setFocus()
 
     def _run_intent(self, intent, slot_value: str | None) -> None:
         self._start_busy(self._button_text(intent))
@@ -380,13 +404,7 @@ class Panel(QWidget):
 
     def _on_text(self) -> None:
         text = self.input.text().strip()
-        if self._busy:
-            return
-        if self._pending_intent is not None:
-            if text:
-                self._submit_slot(text)
-            return
-        if not text:
+        if self._busy or not text:
             return
         self.input.clear()
         self._start_busy(text)
@@ -416,6 +434,7 @@ class Panel(QWidget):
         self._t0 = time.perf_counter()
         self.working.emit(True)
         self._placeholder = True
+        self.response.setMaximumHeight(120)
         self.response.setPlainText(f"⏳ {label}…")
         self.response.show()
         self._clear_rows()
@@ -425,7 +444,12 @@ class Panel(QWidget):
         self._busy = False
         self._placeholder = False
         self.working.emit(False)
-        self.response.setPlainText(result.text)
+        if result.html:
+            self.response.setMaximumHeight(230)
+            self.response.setHtml(result.html)
+        else:
+            self.response.setMaximumHeight(120)
+            self.response.setPlainText(result.text)
         self.response.show()
         if result.items:
             self._show_items(result.items)
@@ -436,7 +460,7 @@ class Panel(QWidget):
                 f"{result.elapsed_ms:.1f} ms · intent={result.intent_id}"
             )
             self.latency.show()
-        self.tts.speak(result.text)
+        self.tts.speak(result.speak or result.text)
 
     def _on_token(self, token: str) -> None:
         if self._placeholder:

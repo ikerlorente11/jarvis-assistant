@@ -19,5 +19,7 @@ class Item:
 
 @dataclass
 class Rich:
-    text: str  # frase de resumen (también es lo que se lee en voz alta)
+    text: str  # respuesta en texto plano (fallback y para el LLM)
     items: list[Item] = field(default_factory=list)
+    html: str | None = None  # tarjeta visual (la pinta la UI si existe)
+    speak: str | None = None  # resumen para la voz (si no, se lee text)
