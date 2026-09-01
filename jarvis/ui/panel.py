@@ -97,8 +97,19 @@ class Panel(QWidget):
         return str((self.router.config.get("ui", {}) or {}).get("theme", "system"))
 
     def _apply_theme(self) -> None:
-        self._frame.setStyleSheet(theme.stylesheet(self._theme_name()))
-        self._theme_effective = theme.effective(self._theme_name())
+        from PySide6.QtWidgets import QApplication
+
+        nombre = self._theme_name()
+        app = QApplication.instance()
+        if app is not None:
+            app.setPalette(theme.palette(nombre))
+        self._frame.setStyleSheet(theme.stylesheet(nombre))
+        self._theme_effective = theme.effective(nombre)
+        # repintar la respuesta visible con los colores del tema nuevo
+        if getattr(self, "response", None) and not self.response.isHidden():
+            texto, html = getattr(self, "_last_response", (None, None))
+            if texto is not None or html is not None:
+                self._set_response(text=texto, html=html)
 
     def _build(self) -> None:
         outer = QVBoxLayout(self)
@@ -117,8 +128,15 @@ class Panel(QWidget):
         self.input.textChanged.connect(self._on_typing)
         layout.addWidget(self.input)
 
+        hint_row = QHBoxLayout()
+        hint_row.setSpacing(6)
         self.hint = QLabel("", objectName="hint")
-        layout.addWidget(self.hint)
+        hint_row.addWidget(self.hint, stretch=1)
+        hint_row.addWidget(
+            self._glyph_button(chr(0xE713), "Ajustes", self._show_settings,
+                               kind="gear")
+        )
+        layout.addLayout(hint_row)
 
         # Input independiente para pedir un valor ("¿Qué programa?"…):
         # aparece solo en modo captura, con su propio estilo.
@@ -160,12 +178,6 @@ class Panel(QWidget):
         self.latency = QLabel("", objectName="latency")
         self.latency.hide()
         layout.addWidget(self.latency)
-
-        # pie: engranaje de Ajustes abajo a la derecha
-        pie = QHBoxLayout()
-        pie.addStretch(1)
-        pie.addWidget(self._glyph_button(chr(0xE713), "Ajustes", self._show_settings))
-        layout.addLayout(pie)
 
         self.voz_pct = None  # se crean al abrir ⚙ Ajustes
         self.setFixedSize(WIDTH, HEIGHT)
@@ -234,9 +246,10 @@ class Panel(QWidget):
                 kind="subrow",
             )
 
-    def _glyph_button(self, glyph: str, tooltip: str, on_click) -> QPushButton:
-        button = QPushButton(glyph, objectName="ctrl")
-        button.setFont(QFont("Segoe MDL2 Assets", 12))
+    def _glyph_button(self, glyph: str, tooltip: str, on_click,
+                      kind: str = "ctrl") -> QPushButton:
+        button = QPushButton(glyph, objectName=kind)
+        button.setFont(QFont("Segoe MDL2 Assets", 10 if kind == "gear" else 12))
         button.setToolTip(tooltip)
         button.clicked.connect(lambda _=False: on_click())
         return button
@@ -701,6 +714,7 @@ class Panel(QWidget):
 
     def _set_response(self, text: str | None = None, html: str | None = None) -> None:
         """Pinta la respuesta y ajusta la altura al contenido (sin hueco)."""
+        self._last_response = (text, html)  # para repintar al cambiar de tema
         if html is not None:
             html = theme.adapt_html(html, self._theme_name())
             self.response.setHtml(f"<div align='center'>{html}</div>")

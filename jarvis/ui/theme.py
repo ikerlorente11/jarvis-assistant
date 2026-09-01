@@ -108,7 +108,18 @@ QScrollArea { border: none; background: transparent; }
 QScrollBar:vertical { background: transparent; width: 8px; }
 QScrollBar::handle:vertical { background: $scrollbar; border-radius: 4px; min-height: 24px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QCheckBox { color: $soft; font-size: 12px; }
+QCheckBox { color: $rowtext; font-size: 12px; spacing: 7px; }
+QCheckBox::indicator {
+    width: 15px; height: 15px; border-radius: 4px;
+    border: 1px solid $cardborder; background: $card;
+}
+QCheckBox::indicator:hover { border-color: $accent; }
+QCheckBox::indicator:checked { background: $accent; border-color: $accent; }
+QPushButton#gear {
+    background: transparent; color: $muted; border: none; border-radius: 14px;
+    min-width: 28px; max-width: 28px; min-height: 28px; text-align: center;
+}
+QPushButton#gear:hover { background: $hover; color: $textstrong; }
 QComboBox {
     background: $card; color: $rowtext; border: 1px solid $cardborder;
     border-radius: 8px; padding: 4px 10px; font-size: 12px;
@@ -125,6 +136,32 @@ QSlider::handle:horizontal {
 QSlider::sub-page:horizontal { background: $accent; border-radius: 2px; }
 QToolTip { background: $card; color: $text; border: 1px solid $hover2; }
 """)
+
+
+def palette(name: str):
+    """QPalette completa: cubre lo que el stylesheet no nombra (indicadores
+    de checkbox, popups de combos, visores de scroll...)."""
+    from PySide6.QtGui import QColor, QPalette
+
+    p = LIGHT if effective(name) == "light" else DARK
+    pal = QPalette()
+    roles = {
+        QPalette.Window: p["bg"],
+        QPalette.WindowText: p["text"],
+        QPalette.Base: p["card"],
+        QPalette.AlternateBase: p["subtle"],
+        QPalette.Text: p["text"],
+        QPalette.Button: p["control"],
+        QPalette.ButtonText: p["rowtext"],
+        QPalette.Highlight: p["accent"],
+        QPalette.HighlightedText: "#ffffff",
+        QPalette.PlaceholderText: p["muted"],
+        QPalette.ToolTipBase: p["card"],
+        QPalette.ToolTipText: p["text"],
+    }
+    for role, color in roles.items():
+        pal.setColor(role, QColor(color))
+    return pal
 
 
 def system_prefers_light() -> bool:
