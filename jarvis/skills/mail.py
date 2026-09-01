@@ -297,16 +297,29 @@ def redactar(config: dict, peticion: str, para_mi: str = ""):
         peticion, re.IGNORECASE,
     ))
 
+    # "meme" = imagen de verdad, no texto: se descarga una y se incrusta
+    meme = None
+    if re.search(r"\bmemes?\b", peticion, re.IGNORECASE):
+        meme = _obtener_meme()
+        if meme is None:
+            return "No he podido conseguir un meme de internet ahora mismo."
+        quiere_html = True  # con imagen, el correo va en HTML
+
     brain = config.get("_brain")
     if brain is None:
         return "Para redactar necesito el LLM y no está disponible."
+    nota_meme = (
+        f"\nEl correo lleva incrustada una imagen de meme titulada "
+        f"«{meme['titulo']}»: escribe solo una frase breve de acompañamiento, "
+        f"sin describir el meme ni inventar otro." if meme else ""
+    )
     if quiere_html:
         salida = brain.quick(
             "Redacta un correo HTML vistoso a partir de la petición. Responde "
             "EXACTAMENTE en este formato, sin nada más:\n"
             "ASUNTO: <una línea>\nCUERPO_HTML:\n<un único <div> con estilos "
             "inline (style=\"...\"), colores suaves y buena tipografía. "
-            "Sin <html>, <head>, <script> ni markdown>",
+            "Sin <html>, <head>, <script> ni markdown>" + nota_meme,
             f"Petición: {peticion}",
         )
     else:
@@ -331,24 +344,36 @@ def redactar(config: dict, peticion: str, para_mi: str = ""):
         else:
             cuerpo = contenido
 
+    inline = None
+    if meme and cuerpo_html:
+        inline = meme["ruta"]
+        cuerpo_html += (
+            "<div style='text-align:center;margin-top:10px'>"
+            "<img src='cid:meme' style='max-width:100%;border-radius:8px'></div>"
+        )
     _borrador = {"para": para, "asunto": asunto, "cuerpo": cuerpo,
-                 "html": cuerpo_html, "adjuntos": adjuntos}
+                 "html": cuerpo_html, "adjuntos": adjuntos, "inline": inline}
     botones = [
         Item("intent", "✅  Enviarlo", "correo_confirmar"),
         Item("intent", "❌  Descartarlo", "correo_cancelar"),
     ]
-    linea_adjuntos = "".join(
-        f"\n📎 {Path(r).name}" for r in adjuntos
-    )
+    linea_adjuntos = "".join(f"\n📎 {Path(r).name}" for r in adjuntos)
     if cuerpo_html:
+        # vista previa sobre fondo blanco: los correos HTML se diseñan para
+        # fondo claro y sobre la tarjeta oscura no se leían bien
+        vista = cuerpo_html
+        if inline:
+            vista = vista.replace("cid:meme", Path(inline).as_uri())
         cabecera = (f"<div style='font-size:12px;color:#8fa3c4'>Para: {para} · "
                     f"Asunto: {asunto}"
                     + "".join(f" · 📎 {Path(r).name}" for r in adjuntos)
-                    + "</div><hr>")
+                    + "</div>")
+        preview = (cabecera + "<div style='background:#ffffff;color:#1a2233;"
+                   f"padding:12px;border-radius:10px'>{vista}</div>")
         return Rich(
             f"Para: {para}\nAsunto: {asunto}{linea_adjuntos}\n{'─' * 30}\n{cuerpo}",
             items=botones,
-            html=cabecera + cuerpo_html,
+            html=preview,
             speak="Te he preparado el borrador; revísalo y confirma.",
         )
     return Rich(
@@ -356,6 +381,26 @@ def redactar(config: dict, peticion: str, para_mi: str = ""):
         items=botones,
         speak="Te he preparado el borrador; revísalo y confirma.",
     )
+
+
+def _obtener_meme() -> dict | None:
+    """Meme aleatorio (meme-api.com, gratis y sin clave) → imagen local."""
+    import tempfile
+
+    import requests
+
+    try:
+        datos = requests.get("https://meme-api.com/gimme", timeout=8).json()
+        url = datos.get("url", "")
+        imagen = requests.get(url, timeout=10).content
+        extension = url.rsplit(".", 1)[-1].lower()
+        if extension not in ("jpg", "jpeg", "png", "gif", "webp"):
+            extension = "jpg"
+        ruta = Path(tempfile.gettempdir()) / f"jarvis-meme.{extension}"
+        ruta.write_bytes(imagen)
+        return {"titulo": datos.get("title", "Meme"), "ruta": str(ruta)}
+    except (requests.RequestException, ValueError, OSError):
+        return None
 
 
 def _buscar_adjunto(config: dict, nombre: str) -> str | None:
@@ -401,6 +446,18 @@ def confirmar(config: dict) -> str:
     mensaje.set_content(_borrador["cuerpo"])
     if _borrador.get("html"):
         mensaje.add_alternative(_borrador["html"], subtype="html")
+        inline = _borrador.get("inline")
+        if inline:
+            try:
+                datos = Path(inline).read_bytes()
+            except OSError:
+                return "No he podido leer la imagen del correo."
+            extension = Path(inline).suffix.lstrip(".") or "jpeg"
+            mensaje.get_payload()[-1].add_related(
+                datos, maintype="image",
+                subtype="jpeg" if extension == "jpg" else extension,
+                cid="<meme>",
+            )
     for ruta in _borrador.get("adjuntos", []):
         try:
             datos = Path(ruta).read_bytes()
@@ -418,15 +475,12 @@ def confirmar(config: dict) -> str:
             smtp.send_message(mensaje)
     except (smtplib.SMTPException, OSError) as exc:
         return f"No he podido enviarlo: {exc.__class__.__name__}."
+    from jarvis.results import Rich
+
     enviado_a = _borrador["para"]
-    extras = []
-    if _borrador.get("html"):
-        extras.append("HTML")
-    if _borrador.get("adjuntos"):
-        extras.append(f"{len(_borrador['adjuntos'])} adjunto(s)")
     _borrador = None
-    detalle = f" ({', '.join(extras)})" if extras else ""
-    return f"✉️ Enviado a {enviado_a}{detalle}."
+    # confirmación sobria y sin voz: el usuario acaba de pulsar el botón
+    return Rich(f"✉️ Enviado a {enviado_a}.", speak="")
 
 
 def cancelar(config: dict) -> str:
