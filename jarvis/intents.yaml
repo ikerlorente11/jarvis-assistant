@@ -14,55 +14,123 @@ categories:
     intents:
       - id: hora
         label: "¿Qué hora es?"
-        patterns:
-          - "qué hora es"
-          - "dime la hora"
-          - "la hora"
+        patterns: ["qué hora es", "dime la hora", "la hora"]
         skill: datetime_info.hora
       - id: fecha
         label: "¿Qué día es hoy?"
-        patterns:
-          - "qué día es hoy"
-          - "qué fecha es"
-          - "dime la fecha"
+        patterns: ["qué día es hoy", "qué fecha es", "dime la fecha"]
         skill: datetime_info.fecha
+      - id: tiempo
+        label: "¿Qué tiempo hace?"
+        patterns: ["qué tiempo hace", "qué tal tiempo hace", "el tiempo", "va a llover"]
+        skill: weather.hoy
+      - id: tiempo_ciudad
+        label: "Tiempo en… {ciudad}"
+        patterns: ["qué tiempo hace en {ciudad}", "tiempo en {ciudad}"]
+        skill: weather.hoy
+      - id: bateria
+        label: "Batería"
+        patterns: ["cuánta batería queda", "batería", "nivel de batería"]
+        skill: system.bateria
 
   programas:
     label: Programas
     intents:
       - id: abrir_programa
         label: "Abrir programa: {app}"
-        patterns:
-          - "abre {app}"
-          - "abrir {app}"
-          - "ábreme {app}"
-          - "abre el {app}"
-          - "abre la {app}"
+        patterns: ["abre {app}", "abrir {app}", "ábreme {app}", "abre el {app}", "abre la {app}"]
         skill: apps.abrir
       - id: abrir_navegador
         label: "Abrir el navegador"
-        patterns:
-          - "abre el navegador"
-          - "abrir navegador"
+        patterns: ["abre el navegador", "abrir navegador"]
         skill: apps.abrir
-        params:
-          app: navegador
+        params: { app: navegador }
+      - id: abrir_web
+        label: "Abrir web: {url}"
+        patterns: ["abre la web {url}", "abre la página {url}", "ve a {url}", "entra en {url}"]
+        skill: web.abrir
+      - id: modo
+        label: "Activar modo: {perfil}"
+        patterns: ["modo {perfil}", "activa el modo {perfil}", "ponte en modo {perfil}"]
+        skill: apps.modo
 
   archivos:
     label: Archivos
     intents:
       - id: abrir_carpeta
         label: "Abrir carpeta: {carpeta}"
-        patterns:
-          - "abre la carpeta {carpeta}"
-          - "abrir carpeta {carpeta}"
-          - "abre la carpeta de {carpeta}"
+        patterns: ["abre la carpeta {carpeta}", "abrir carpeta {carpeta}", "abre la carpeta de {carpeta}"]
         skill: folders.abrir
       - id: abrir_descargas
         label: "Abrir Descargas"
-        patterns:
-          - "abre descargas"
-          - "abre las descargas"
+        patterns: ["abre descargas", "abre las descargas"]
         skill: folders.abrir
-        params:
-          carpeta: descargas
+        params: { carpeta: descargas }
+      - id: buscar_archivo
+        label: "Buscar archivo: {texto}"
+        patterns: ["busca {texto}", "busca el archivo {texto}", "encuentra {texto}"]
+        skill: files.buscar
+      - id: abrir_archivo
+        label: "Abrir archivo: {texto}"
+        patterns: ["abre el archivo {texto}", "abre el fichero {texto}"]
+        skill: files.abrir
+
+  sistema:
+    label: Sistema
+    intents:
+      - id: volumen_subir
+        label: "Subir volumen"
+        patterns: ["sube el volumen", "más volumen", "sube volumen"]
+        skill: system.volumen_subir
+      - id: volumen_bajar
+        label: "Bajar volumen"
+        patterns: ["baja el volumen", "menos volumen", "baja volumen"]
+        skill: system.volumen_bajar
+      - id: volumen_poner
+        label: "Volumen al… {nivel}"
+        patterns: ["volumen al {nivel}", "pon el volumen al {nivel}"]
+        skill: system.volumen_poner
+      - id: silenciar
+        label: "Silenciar / activar sonido"
+        patterns: ["silencio", "silénciate", "mute", "activa el sonido", "quita el silencio"]
+        skill: system.silenciar
+      - id: play_pausa
+        label: "Play / pausa"
+        patterns: ["pausa", "play", "reproduce", "para la música", "reanuda"]
+        skill: media.play_pausa
+      - id: siguiente
+        label: "Siguiente canción"
+        patterns: ["siguiente", "siguiente canción", "pasa la canción"]
+        skill: media.siguiente
+      - id: anterior
+        label: "Canción anterior"
+        patterns: ["anterior", "canción anterior", "vuelve a la canción"]
+        skill: media.anterior
+      - id: captura
+        label: "Captura de pantalla"
+        patterns: ["haz una captura", "captura de pantalla", "pantallazo"]
+        skill: system.captura
+      - id: minimizar
+        label: "Minimizar todo"
+        patterns: ["minimiza todo", "minimiza las ventanas", "enséñame el escritorio"]
+        skill: system.minimizar_todo
+
+  productividad:
+    label: Productividad
+    intents:
+      - id: timer
+        label: "Avísame en… {tiempo}"
+        patterns: ["avísame en {tiempo}", "temporizador de {tiempo}", "pon un temporizador de {tiempo}"]
+        skill: timers.crear
+      - id: nota_crear
+        label: "Apuntar nota: {texto}"
+        patterns: ["apunta {texto}", "apunta que {texto}", "toma nota de {texto}"]
+        skill: notes.crear
+      - id: nota_leer
+        label: "Leer mis notas"
+        patterns: ["lee mis notas", "qué notas tengo", "mis notas"]
+        skill: notes.leer
+      - id: portapapeles
+        label: "Leer el portapapeles"
+        patterns: ["lee el portapapeles", "qué he copiado", "lee lo que he copiado"]
+        skill: clipboard.leer

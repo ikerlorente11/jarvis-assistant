@@ -6,3 +6,10 @@ PyYAML==6.0.3
 # Fase 1 — bolita + router fast path
 PySide6==6.11.2
 rapidfuzz==3.14.6
+# Fase 2 — fast path completo
+pycaw==20251023
+comtypes==1.4.16
+mss==10.2.0
+winotify==1.1.0
+pyperclip==1.11.0
+requests==2.34.2

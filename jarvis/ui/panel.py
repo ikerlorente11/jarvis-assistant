@@ -117,7 +117,8 @@ class Panel(QWidget):
     def _button_text(intent) -> str:
         # "Abrir programa: {app}" → "Abrir programa…" (el valor se pide al pulsar)
         if intent.slot:
-            return intent.label.split(":")[0].split("{")[0].strip() + "…"
+            base = intent.label.split("{")[0].rstrip(" :…")
+            return base + "…"
         return intent.label
 
     # -- acciones ------------------------------------------------------------

@@ -19,6 +19,17 @@ apps:
   calculadora: calc
 
 # Alias de carpetas: lo que dices → ruta (las estándar ya se conocen:
-# descargas, documentos, escritorio, imágenes, música, vídeos)
+# descargas, documentos, escritorio, imágenes, música, vídeos).
+# El resto de carpetas se buscan solas con Everything.
 folders:
   proyectos: ~/Documents/Develop
+
+# Alias de webs: lo que dices → URL
+sites:
+  correo: https://mail.google.com
+
+# Perfiles de apps: "modo trabajo" abre todo esto de golpe
+app_profiles:
+  trabajo:
+    - navegador
+    - visual studio code

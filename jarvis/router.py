@@ -31,10 +31,11 @@ FUZZY_CUTOFF = 80  # score mínimo (0-100) para dar por bueno un patrón fijo
 
 
 def _normalize(text: str) -> str:
-    """minúsculas, sin tildes, sin signos, espacios colapsados."""
+    """minúsculas, sin tildes, espacios colapsados. Se conservan los signos
+    que forman parte de nombres y URLs (notepad++, google.com, a/b)."""
     text = unicodedata.normalize("NFKD", text.lower())
     text = "".join(c for c in text if not unicodedata.combining(c))
-    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"[^\w\s.+#:/&=%-]", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
