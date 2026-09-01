@@ -235,6 +235,16 @@ categories:
     intents:
       - id: correo_leer
         label: "¿Tengo correos nuevos?"
-        description: "Lee los correos sin abrir de la cuenta enlazada (⚙ Ajustes)."
-        patterns: ["tengo correos nuevos", "lee mi correo", "correos nuevos", "revisa el correo"]
+        description: "Lista remitente y asunto de los correos sin abrir (⚙ Ajustes para enlazar)."
+        patterns: ["tengo correos nuevos", "correos nuevos", "revisa el correo"]
         skill: mail.leer
+      - id: correo_ultimo
+        label: "Leer el último correo"
+        description: "Lee el último correo recibido y te resume de qué trata y si pide hacer algo."
+        patterns:
+          - "lee el último correo"
+          - "léeme el último correo"
+          - "qué dice el último correo"
+          - "de qué trata el último correo"
+          - "lee mi último correo"
+        skill: mail.ultimo

@@ -99,6 +99,91 @@ def leer(config: dict):
     return Rich(texto, speak=f"Tienes {total} correo{plural} sin leer.")
 
 
+def ultimo(config: dict):
+    """Lee el último correo recibido y lo resume con el LLM: de qué trata
+    y si requiere hacer algo — no solo remitente y asunto."""
+    from jarvis.results import Rich
+
+    cuenta = cuenta_enlazada(config)
+    if not cuenta:
+        return "No hay ningún correo enlazado — hazlo desde ⚙ Ajustes."
+    password = keyring.get_password(SERVICE, cuenta)
+    servidor = config["mail"].get("imap") or "imap." + cuenta.split("@", 1)[1]
+    if not password:
+        return "No encuentro la contraseña guardada; vuelve a enlazar el correo."
+    try:
+        with imaplib.IMAP4_SSL(servidor, timeout=10) as imap:
+            imap.login(cuenta, password)
+            imap.select("INBOX", readonly=True)
+            _estado, datos = imap.search(None, "ALL")
+            ids = datos[0].split()
+            if not ids:
+                return "Tu bandeja de entrada está vacía."
+            _estado, crudo = imap.fetch(ids[-1], "(BODY.PEEK[])")
+    except (imaplib.IMAP4.error, OSError) as exc:
+        return f"No he podido leer el correo: {exc.__class__.__name__}."
+
+    import email as email_lib
+
+    mensaje = None
+    for parte in crudo:
+        if isinstance(parte, tuple):
+            mensaje = email_lib.message_from_bytes(parte[1])
+            break
+    if mensaje is None:
+        return "No he podido descargar el correo."
+    remitente = _decodificar(mensaje.get("From", "?"))
+    asunto = _decodificar(mensaje.get("Subject", "(sin asunto)"))
+    cuerpo = _cuerpo(mensaje)[:4000]
+
+    brain = config.get("_brain")
+    if brain is not None and cuerpo.strip():
+        resumen = brain.quick(
+            "Resume este correo en 2 o 3 frases: de qué trata y, si pide "
+            "hacer algo, qué y para cuándo. Solo lo relevante para quien "
+            "lo recibe.",
+            f"De: {remitente}\nAsunto: {asunto}\n\n{cuerpo}",
+        )
+        if resumen:
+            texto = f"📩 {asunto} — {remitente}\n\n{resumen}"
+            return Rich(texto, speak=f"Último correo, de {remitente}. {resumen}")
+
+    # sin LLM: al menos el principio del cuerpo, no solo el asunto
+    extracto = " ".join(cuerpo.split())[:350]
+    return Rich(
+        f"📩 {asunto} — {remitente}\n\n{extracto}…",
+        speak=f"Último correo de {remitente}: {asunto}.",
+    )
+
+
+def _cuerpo(mensaje) -> str:
+    """Texto plano del correo; si solo hay HTML, se limpia de etiquetas."""
+    import html as html_lib
+    import re
+
+    def _decodifica_parte(parte) -> str:
+        payload = parte.get_payload(decode=True) or b""
+        charset = parte.get_content_charset() or "utf-8"
+        return payload.decode(charset, errors="replace")
+
+    plano, html = "", ""
+    partes = mensaje.walk() if mensaje.is_multipart() else [mensaje]
+    for parte in partes:
+        tipo = parte.get_content_type()
+        if "attachment" in str(parte.get("Content-Disposition", "")):
+            continue
+        if tipo == "text/plain" and not plano:
+            plano = _decodifica_parte(parte)
+        elif tipo == "text/html" and not html:
+            html = _decodifica_parte(parte)
+    if plano.strip():
+        return plano
+    texto = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html,
+                   flags=re.DOTALL | re.IGNORECASE)
+    texto = re.sub(r"<[^>]+>", " ", texto)
+    return re.sub(r"\s+", " ", html_lib.unescape(texto)).strip()
+
+
 def _parse_cabecera(cabecera) -> tuple[str, str]:
     import email as email_lib
 

@@ -93,6 +93,34 @@ class Brain:
             return "Ollama no está en marcha (arranca la app de Ollama)."
         return None
 
+    def quick(self, instruccion: str, texto: str) -> str | None:
+        """Petición simple sin tools ni historial (resumir un correo, una
+        noticia...). None si el LLM no está disponible."""
+        if not self.enabled or self.available() is not None:
+            return None
+        try:
+            response = requests.post(
+                f"{OLLAMA}/api/chat",
+                json={
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system",
+                         "content": "Responde en español, breve y sin markdown."},
+                        {"role": "user", "content": f"{instruccion}\n\n{texto}"},
+                    ],
+                    "stream": False,
+                    "think": False,
+                    "keep_alive": -1,
+                },
+                timeout=(5, 300),
+            )
+            response.raise_for_status()
+            return _sin_razonamiento(
+                response.json()["message"]["content"]
+            ).strip() or None
+        except (requests.RequestException, KeyError, ValueError):
+            return None
+
     def chat(self, text: str, on_token=None) -> str:
         """Conversa con tools; on_token(str) recibe la respuesta en streaming."""
         emit = on_token or (lambda token: None)

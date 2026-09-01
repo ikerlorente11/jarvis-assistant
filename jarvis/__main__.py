@@ -55,6 +55,7 @@ def main() -> None:
     from jarvis.brain import Brain
 
     brain = Brain(config, router, profile)
+    config["_brain"] = brain  # para skills que resumen con el LLM (correo...)
 
     from jarvis.ui.app import run  # import tardío: PySide6 pesa
 
