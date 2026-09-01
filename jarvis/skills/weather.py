@@ -1,7 +1,8 @@
 """Tiempo con Open-Meteo: API gratuita sin clave (geocoding + forecast).
 
-La ciudad sale de config.yaml (`city:`); con `auto` (o vacío) se detecta por
-IP una vez por sesión. Siempre se puede pedir otra: "qué tiempo hace en X".
+La ciudad sale de config.yaml (`city:`); con `auto` (o vacío) se usa la
+ubicación real de Windows (WiFi, precisa) y, si está desactivada, la IP
+(aproximada). Siempre se puede pedir otra: "qué tiempo hace en X".
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ WMO = {
 
 DIAS_SEMANA = ("lun", "mar", "mié", "jue", "vie", "sáb", "dom")
 
-_ciudad_ip: str | None = None  # caché de la detección por IP (una por sesión)
+_ubicacion_auto: dict | None = None  # caché de la detección (una por sesión)
 
 
 def hoy(config: dict, ciudad: str | None = None) -> str:
@@ -99,13 +100,14 @@ def prevision(config: dict, dias: str = "7", ciudad: str | None = None) -> str:
 
 
 def _geolocalizar(config: dict, ciudad: str | None) -> dict | str:
-    """Nombre de ciudad → dict de Open-Meteo geocoding; str = mensaje de error."""
+    """→ dict con name/latitude/longitude; str = mensaje de error."""
     lugar = (ciudad or config.get("city") or "auto").strip()
     if lugar.lower() == "auto":
-        lugar = _ciudad_por_ip()
-        if lugar is None:
-            return ("No he podido detectar tu ciudad por IP. "
-                    "Pon `city: TuCiudad` en config.yaml.")
+        auto = _detectar_ubicacion()
+        if auto is None:
+            return ("No he podido detectar tu ubicación (activa la ubicación "
+                    "de Windows o pon `city: TuCiudad` en config.yaml).")
+        return auto
     try:
         geo = requests.get(
             "https://geocoding-api.open-meteo.com/v1/search",
@@ -119,16 +121,64 @@ def _geolocalizar(config: dict, ciudad: str | None) -> dict | str:
     return geo["results"][0]
 
 
-def _ciudad_por_ip() -> str | None:
-    global _ciudad_ip
-    if _ciudad_ip:
-        return _ciudad_ip
-    for url in ("https://ipapi.co/json/", "http://ip-api.com/json/?fields=city"):
+def _detectar_ubicacion() -> dict | None:
+    """Ubicación de Windows (precisa); si no, ciudad por IP (aproximada)."""
+    global _ubicacion_auto
+    if _ubicacion_auto:
+        return _ubicacion_auto
+
+    coords = _windows_location()
+    if coords:
+        lat, lon = coords
+        _ubicacion_auto = {
+            "name": _nombre_lugar(lat, lon) or "tu ubicación",
+            "latitude": lat,
+            "longitude": lon,
+        }
+        return _ubicacion_auto
+
+    for url in ("https://ipapi.co/json/", "http://ip-api.com/json/?fields=city,lat,lon"):
         try:
-            ciudad = requests.get(url, timeout=6).json().get("city")
-            if ciudad:
-                _ciudad_ip = ciudad
-                return ciudad
+            datos = requests.get(url, timeout=6).json()
+            ciudad = datos.get("city")
+            lat = datos.get("latitude", datos.get("lat"))
+            lon = datos.get("longitude", datos.get("lon"))
+            if ciudad and lat is not None:
+                _ubicacion_auto = {"name": ciudad, "latitude": lat, "longitude": lon}
+                return _ubicacion_auto
         except (requests.RequestException, ValueError):
             continue
     return None
+
+
+def _windows_location() -> tuple[float, float] | None:
+    """lat/lon de la API de ubicación de Windows; None si está denegada."""
+    try:
+        import asyncio
+
+        from winrt.windows.devices.geolocation import Geolocator
+
+        async def obtener():
+            estado = await Geolocator.request_access_async()
+            if int(estado) != 1:  # 1 = ALLOWED
+                return None
+            posicion = await Geolocator().get_geoposition_async()
+            punto = posicion.coordinate.point.position
+            return punto.latitude, punto.longitude
+
+        return asyncio.run(obtener())
+    except Exception:
+        return None
+
+
+def _nombre_lugar(lat: float, lon: float) -> str | None:
+    """Geocoding inverso gratuito y sin clave (BigDataCloud)."""
+    try:
+        datos = requests.get(
+            "https://api.bigdatacloud.net/data/reverse-geocode-client",
+            params={"latitude": lat, "longitude": lon, "localityLanguage": "es"},
+            timeout=6,
+        ).json()
+        return datos.get("city") or datos.get("locality") or None
+    except (requests.RequestException, ValueError):
+        return None
