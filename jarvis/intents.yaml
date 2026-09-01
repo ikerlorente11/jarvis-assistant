@@ -305,6 +305,8 @@ categories:
           - "manda un correo {peticion}"
           - "escribe un correo {peticion}"
           - "envía un email {peticion}"
+          - "envía un mail {peticion}"
+          - "manda un mail {peticion}"
         skill: mail.redactar
       - id: correo_enviarme
         label: "Enviarme un correo: {peticion}"
@@ -315,11 +317,14 @@ categories:
           - "mándame un correo {peticion}"
           - "envíame un email {peticion}"
           - "mándame un email {peticion}"
+          - "envíame un mail {peticion}"
+          - "mándame un mail {peticion}"
         skill: mail.redactar
         params: { para_mi: "si" }
       - id: correo_confirmar
         label: "Confirmar envío"
         hidden: true
+        no_tool: true  # confirmar es SIEMPRE del humano, nunca del LLM
         description: "Envía el borrador pendiente."
         patterns: ["envíalo", "mándalo", "confirma el envío", "sí envíalo"]
         skill: mail.confirmar

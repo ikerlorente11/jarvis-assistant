@@ -23,7 +23,8 @@ MAX_TOOL_ROUNDS = 4  # llamadas encadenadas de tools antes de cortar
 SYSTEM_PROMPT = """Eres JARVIS, un asistente de escritorio que corre en local.
 Responde SIEMPRE en español, breve y directo (1-3 frases), sin markdown.
 Si la petición encaja con una de tus herramientas, úsala en vez de explicar
-cómo hacerlo; tras usarla, resume el resultado en una frase.
+cómo hacerlo; tras usarla, cuenta SOLO lo que la herramienta devolvió, tal
+cual: nunca afirmes que algo se envió o completó si el resultado no lo dice.
 Hoy es {fecha}."""
 
 
@@ -201,7 +202,12 @@ class Brain:
                 return f"Error: falta el argumento {intent.slot}."
         result = self.router.run_intent(intent.id, slot_value)
         text = result.text
-        if result.items:
+        if any(i.kind == "intent" for i in result.items):
+            # botones de confirmación humana (enviar un correo, etc.)
+            text += ("\nIMPORTANTE: esto es SOLO un borrador, NO se ha enviado. "
+                     "El usuario debe revisarlo y pulsar el botón de confirmar. "
+                     "Dile exactamente eso.")
+        elif result.items:
             text += " " + "; ".join(i.label for i in result.items[:8])
         return text
 
@@ -209,6 +215,8 @@ class Brain:
         """Un tool por intent del catálogo; el {slot} es su único parámetro."""
         tools = []
         for intent in self.router.intents:
+            if intent.no_tool:  # confirmaciones humanas: fuera del LLM
+                continue
             properties, required = {}, []
             if intent.slot:
                 properties[intent.slot] = {

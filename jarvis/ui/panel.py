@@ -789,6 +789,19 @@ class Panel(QWidget):
         self._placeholder = False
         self._busy_timer.stop()
         self.working.emit(False)
+        # si el LLM dejó un borrador de correo pendiente, botones a la vista
+        try:
+            from jarvis.results import Item
+            from jarvis.skills import mail
+
+            if mail._borrador is not None:
+                self._show_items([
+                    Item("intent", "✅  Enviarlo", "correo_confirmar"),
+                    Item("intent", "❌  Descartarlo", "correo_cancelar"),
+                ])
+                return
+        except Exception:
+            pass
         self._show_categories()
         if self.debug:
             self.latency.setText(f"{elapsed_ms:.0f} ms · slow path (LLM)")

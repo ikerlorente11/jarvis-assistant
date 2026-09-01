@@ -50,6 +50,7 @@ class Intent:
     description: str = ""  # tooltip del menú y texto del diálogo del slot
     options_from: str | None = None  # clave de config cuyas claves son opciones
     hidden: bool = False  # no aparece en menús/sugerencias (sí por texto/LLM)
+    no_tool: bool = False  # el LLM no puede invocarlo (confirmaciones humanas)
 
     @property
     def slot(self) -> str | None:
@@ -96,6 +97,7 @@ class Router:
                         description=entry.get("description", ""),
                         options_from=entry.get("options_from"),
                         hidden=bool(entry.get("hidden", False)),
+                        no_tool=bool(entry.get("no_tool", False)),
                     )
                 )
 
