@@ -87,8 +87,12 @@ def abrir(config: dict, app: str) -> str:
     return f"No he encontrado el programa «{app}»."
 
 
-def modo(config: dict, perfil: str) -> str:
-    """Perfiles de apps: "modo trabajo" abre N programas de config.yaml."""
+def modo(config: dict, perfil: str):
+    """Perfiles: "modo trabajo" ejecuta las órdenes del perfil. Cada entrada
+    puede ser una orden completa del router ("el tiempo en logroño") o un
+    nombre de programa/web a abrir."""
+    from jarvis.results import Rich
+
     perfiles = config.get("app_profiles", {})
     nombre = perfil.strip().lower()
     match = process.extractOne(
@@ -97,8 +101,17 @@ def modo(config: dict, perfil: str) -> str:
     if not match:
         disponibles = ", ".join(perfiles) or "ninguno configurado"
         return f"No conozco el modo «{perfil}» (disponibles: {disponibles})."
-    respuestas = [abrir(config, app) for app in perfiles[match[0]]]
-    return f"Modo {match[0]}: " + " ".join(respuestas)
+    router = config.get("_router")
+    hechas = []
+    for orden in perfiles[match[0]]:
+        if router is not None and router.matches(orden):
+            resultado = router.handle(orden)
+            hechas.append(f"✓ {orden} — {resultado.text.splitlines()[0][:60]}")
+        else:
+            resultado = abrir(config, orden)
+            texto = resultado.text if hasattr(resultado, "text") else resultado
+            hechas.append(f"✓ {orden} — {texto[:60]}")
+    return Rich(f"Modo {match[0]}:\n" + "\n".join(hechas), speak="")
 
 
 @functools.lru_cache(maxsize=1)

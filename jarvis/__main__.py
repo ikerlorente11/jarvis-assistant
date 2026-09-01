@@ -43,6 +43,7 @@ def main() -> None:
 
     config = config_module.load()
     router = Router(config)
+    config["_router"] = router  # para skills que ejecutan órdenes (modos)
 
     # arma los recordatorios pendientes (los perdidos avisan al arrancar)
     try:

@@ -35,7 +35,7 @@ def _normalize(text: str) -> str:
     que forman parte de nombres y URLs (notepad++, google.com, a/b)."""
     text = unicodedata.normalize("NFKD", text.lower())
     text = "".join(c for c in text if not unicodedata.combining(c))
-    text = re.sub(r"[^\w\s.+#:/&=%@-]", " ", text)
+    text = re.sub(r"[^\w\s.+#:/&=%@>~\\-]", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -133,7 +133,19 @@ class Router:
         normalized = _normalize(text)
         if not normalized:
             return Result("Dime algo.", False, None, _ms(start))
+        encontrado = self._match(normalized)
+        if encontrado is not None:
+            intent, extra = encontrado
+            return self._run(intent, extra, start)
+        return Result(
+            "Aún no sé hacer eso (irá al LLM en la fase 3).", False, None, _ms(start)
+        )
 
+    def matches(self, text: str) -> bool:
+        """¿El fast path entendería este texto? (sin ejecutar nada)."""
+        return self._match(_normalize(text)) is not None
+
+    def _match(self, normalized: str) -> tuple[Intent, dict] | None:
         # 1. Fuzzy sobre patrones fijos (más específicos que un slot genérico).
         best = process.extractOne(
             normalized,
@@ -142,18 +154,13 @@ class Router:
             score_cutoff=FUZZY_CUTOFF,
         )
         if best:
-            intent = self._fixed_intents[best[2]]
-            return self._run(intent, {}, start)
-
+            return self._fixed_intents[best[2]], {}
         # 2. Regex de patrones con slot.
         for regex, slot_name, intent in self._slot_patterns:
             match = regex.match(normalized)
             if match:
-                return self._run(intent, {slot_name: match.group(1)}, start)
-
-        return Result(
-            "Aún no sé hacer eso (irá al LLM en la fase 3).", False, None, _ms(start)
-        )
+                return intent, {slot_name: match.group(1)}
+        return None
 
     def run_intent(self, intent_id: str, slot_value: str | None = None) -> Result:
         """Dispatch directo desde el menú de la UI, sin matching."""

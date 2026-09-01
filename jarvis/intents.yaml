@@ -229,6 +229,36 @@ categories:
         patterns: ["lee el portapapeles", "qué he copiado", "lee lo que he copiado"]
         skill: clipboard.leer
 
+  personalizar:
+    label: Personalizar
+    icon: "🛠️"
+    intents:
+      - id: alias_agregar
+        label: "Añadir alias: {datos}"
+        description: "«nombre -> destino»: contacto (email), web (dominio), carpeta (ruta) o programa. Ej.: Ainhoa -> noah@gmail.com"
+        patterns:
+          - "añade el alias {datos}"
+          - "añade un alias {datos}"
+          - "crea el alias {datos}"
+          - "añade el contacto {datos}"
+          - "añade un contacto {datos}"
+          - "guarda el contacto {datos}"
+        skill: customize.alias
+      - id: modo_crear
+        label: "Crear modo: {datos}"
+        description: "«nombre con orden1, orden2…»: cada orden es un comando del asistente. Ej.: arranca con youtube.com y el tiempo en logroño"
+        patterns:
+          - "crea el modo {datos}"
+          - "crea un modo {datos}"
+          - "nuevo modo {datos}"
+          - "añade el modo {datos}"
+        skill: customize.modo
+      - id: personalizacion_ver
+        label: "Ver mi personalización"
+        description: "Muestra tus contactos, alias, webs, carpetas y modos guardados."
+        patterns: ["mis alias", "mis contactos", "qué modos tengo", "mi personalización"]
+        skill: customize.ver
+
   comunicacion:
     label: Comunicación
     icon: "📧"
