@@ -299,7 +299,7 @@ categories:
         skill: mail.de_remitente
       - id: correo_enviar
         label: "Enviar correo: {peticion}"
-        description: "El asistente redacta el correo por ti y te lo enseña antes de enviarlo. Ej.: a maria@x.com diciendo que llego 10 min tarde"
+        description: "Redacta el correo y te lo enseña antes de enviar. Admite «bonito» (HTML con estilo) y «con el archivo X adjunto» (lo busca solo). Ej.: a maria@x.com diciendo que llego tarde"
         patterns:
           - "envía un correo {peticion}"
           - "manda un correo {peticion}"

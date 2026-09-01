@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import imaplib
 from email.header import decode_header
+from pathlib import Path
 
 import keyring
 
@@ -278,37 +279,110 @@ def redactar(config: dict, peticion: str, para_mi: str = ""):
                 "dirección («…a nombre@dominio.com») o un contacto guardado "
                 "(«añade el contacto Nombre -> correo»).")
 
+    # adjuntos: "…con el archivo informe adjunto" → se busca con Everything
+    adjuntos = []
+    encaje = re.search(
+        r"(?:adjunta(?:ndo)?|con el (?:archivo|fichero)|el (?:archivo|fichero))"
+        r"\s+([\w\-.]+)", peticion, re.IGNORECASE,
+    )
+    if encaje:
+        nombre = encaje.group(1)
+        ruta = _buscar_adjunto(config, nombre)
+        if ruta is None:
+            return f"No encuentro ningún archivo «{nombre}» para adjuntar."
+        adjuntos.append(ruta)
+
+    quiere_html = bool(re.search(
+        r"\b(bonito|html|con estilo|currado|elegante|formateado|vistoso)\b",
+        peticion, re.IGNORECASE,
+    ))
+
     brain = config.get("_brain")
     if brain is None:
         return "Para redactar necesito el LLM y no está disponible."
-    salida = brain.quick(
-        "Redacta un correo en español a partir de la petición. Responde "
-        "EXACTAMENTE en este formato, sin nada más:\n"
-        "ASUNTO: <una línea>\nCUERPO:\n<cuerpo breve y natural>",
-        f"Petición: {peticion}",
-    )
+    if quiere_html:
+        salida = brain.quick(
+            "Redacta un correo HTML vistoso a partir de la petición. Responde "
+            "EXACTAMENTE en este formato, sin nada más:\n"
+            "ASUNTO: <una línea>\nCUERPO_HTML:\n<un único <div> con estilos "
+            "inline (style=\"...\"), colores suaves y buena tipografía. "
+            "Sin <html>, <head>, <script> ni markdown>",
+            f"Petición: {peticion}",
+        )
+    else:
+        salida = brain.quick(
+            "Redacta un correo en español a partir de la petición. Responde "
+            "EXACTAMENTE en este formato, sin nada más:\n"
+            "ASUNTO: <una línea>\nCUERPO:\n<cuerpo breve y natural>",
+            f"Petición: {peticion}",
+        )
     if not salida:
         return "No he podido redactar el borrador (¿Ollama está en marcha?)."
-    asunto, cuerpo = "Mensaje", salida.strip()
-    encaje = re.search(r"ASUNTO:\s*(.+?)\s*CUERPO:\s*(.+)", salida, re.DOTALL)
+    salida = re.sub(r"```\w*|```", "", salida).strip()  # sin vallas de código
+    asunto, cuerpo, cuerpo_html = "Mensaje", salida, None
+    encaje = re.search(r"ASUNTO:\s*(.+?)\s*CUERPO(_HTML)?:\s*(.+)", salida, re.DOTALL)
     if encaje:
-        asunto, cuerpo = encaje.group(1).strip(), encaje.group(2).strip()
+        asunto = encaje.group(1).strip()
+        contenido = encaje.group(3).strip()
+        if encaje.group(2) or quiere_html:
+            cuerpo_html = re.sub(r"<script.*?</script>", "", contenido,
+                                 flags=re.DOTALL | re.IGNORECASE)
+            cuerpo = _texto_plano(cuerpo_html)
+        else:
+            cuerpo = contenido
 
-    _borrador = {"para": para, "asunto": asunto, "cuerpo": cuerpo}
+    _borrador = {"para": para, "asunto": asunto, "cuerpo": cuerpo,
+                 "html": cuerpo_html, "adjuntos": adjuntos}
+    botones = [
+        Item("intent", "✅  Enviarlo", "correo_confirmar"),
+        Item("intent", "❌  Descartarlo", "correo_cancelar"),
+    ]
+    linea_adjuntos = "".join(
+        f"\n📎 {Path(r).name}" for r in adjuntos
+    )
+    if cuerpo_html:
+        cabecera = (f"<div style='font-size:12px;color:#8fa3c4'>Para: {para} · "
+                    f"Asunto: {asunto}"
+                    + "".join(f" · 📎 {Path(r).name}" for r in adjuntos)
+                    + "</div><hr>")
+        return Rich(
+            f"Para: {para}\nAsunto: {asunto}{linea_adjuntos}\n{'─' * 30}\n{cuerpo}",
+            items=botones,
+            html=cabecera + cuerpo_html,
+            speak="Te he preparado el borrador; revísalo y confirma.",
+        )
     return Rich(
-        f"Para: {para}\nAsunto: {asunto}\n{'─' * 30}\n{cuerpo}",
-        items=[
-            Item("intent", "✅  Enviarlo", "correo_confirmar"),
-            Item("intent", "❌  Descartarlo", "correo_cancelar"),
-        ],
+        f"Para: {para}\nAsunto: {asunto}{linea_adjuntos}\n{'─' * 30}\n{cuerpo}",
+        items=botones,
         speak="Te he preparado el borrador; revísalo y confirma.",
     )
 
 
+def _buscar_adjunto(config: dict, nombre: str) -> str | None:
+    from rapidfuzz import fuzz
+
+    from jarvis.skills.files import everything
+
+    rutas = everything(config, f"file: {nombre}", max_results=20)
+    if not rutas:
+        return None
+    return max(rutas, key=lambda r: fuzz.WRatio(nombre.lower(), Path(r).name.lower()))
+
+
+def _texto_plano(html: str) -> str:
+    import html as html_lib
+    import re
+
+    texto = re.sub(r"<br\s*/?>|</p>|</div>", "\n", html, flags=re.IGNORECASE)
+    texto = re.sub(r"<[^>]+>", "", texto)
+    return html_lib.unescape(re.sub(r"\n{3,}", "\n\n", texto)).strip()
+
+
 def confirmar(config: dict) -> str:
-    """Envía el borrador pendiente por SMTP."""
+    """Envía el borrador pendiente por SMTP (texto, HTML y adjuntos)."""
+    import mimetypes
     import smtplib
-    from email.mime.text import MIMEText
+    from email.message import EmailMessage
 
     global _borrador
     if _borrador is None:
@@ -319,20 +393,40 @@ def confirmar(config: dict) -> str:
         return "No hay correo enlazado o falta la contraseña (⚙ Ajustes)."
     dominio = cuenta.split("@", 1)[1]
     servidor = SMTP_PRESETS.get(dominio, f"smtp.{dominio}")
-    mensaje = MIMEText(_borrador["cuerpo"], "plain", "utf-8")
+
+    mensaje = EmailMessage()
     mensaje["From"] = cuenta
     mensaje["To"] = _borrador["para"]
     mensaje["Subject"] = _borrador["asunto"]
+    mensaje.set_content(_borrador["cuerpo"])
+    if _borrador.get("html"):
+        mensaje.add_alternative(_borrador["html"], subtype="html")
+    for ruta in _borrador.get("adjuntos", []):
+        try:
+            datos = Path(ruta).read_bytes()
+        except OSError:
+            return f"No he podido leer el adjunto {Path(ruta).name}."
+        tipo, _codificacion = mimetypes.guess_type(ruta)
+        maintype, subtype = (tipo or "application/octet-stream").split("/", 1)
+        mensaje.add_attachment(
+            datos, maintype=maintype, subtype=subtype, filename=Path(ruta).name
+        )
     try:
-        with smtplib.SMTP(servidor, 587, timeout=15) as smtp:
+        with smtplib.SMTP(servidor, 587, timeout=30) as smtp:
             smtp.starttls()
             smtp.login(cuenta, password)
             smtp.send_message(mensaje)
     except (smtplib.SMTPException, OSError) as exc:
         return f"No he podido enviarlo: {exc.__class__.__name__}."
     enviado_a = _borrador["para"]
+    extras = []
+    if _borrador.get("html"):
+        extras.append("HTML")
+    if _borrador.get("adjuntos"):
+        extras.append(f"{len(_borrador['adjuntos'])} adjunto(s)")
     _borrador = None
-    return f"✉️ Enviado a {enviado_a}."
+    detalle = f" ({', '.join(extras)})" if extras else ""
+    return f"✉️ Enviado a {enviado_a}{detalle}."
 
 
 def cancelar(config: dict) -> str:
