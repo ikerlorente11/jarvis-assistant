@@ -9,10 +9,10 @@ profile: auto
 tts:
   enabled: false
   volume: 80          # volumen de la voz del asistente (0-100)
-  voice: es_ES-sharvard-medium   # alternativa: es_ES-davefx-medium
+  voice: es_ES-davefx-medium   # alternativa: es_ES-sharvard-medium
   # Palabras que la voz pronuncie mal → cómo decirlas
-  replacements: {}
-  #  ejemplo: "cargando": "en carga"
+  replacements:
+    cargando: "en carga"
 
 # Ciudad para el tiempo (Open-Meteo). "auto" = detectar por IP;
 # escribe un nombre de ciudad para fijarla.

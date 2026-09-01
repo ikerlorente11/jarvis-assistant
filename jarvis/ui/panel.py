@@ -1,10 +1,11 @@
-"""Panel de la bolita: menús acordeón por categorías (generados del catálogo
-de intents), campo de texto libre, respuesta con resultados clicables.
+"""Panel lanzador de JARVIS, estilo Spotlight / PowerToys Run.
 
-No sabe nada de skills: todo pasa por el router (dispatch directo por id
-desde los botones, handle() para el texto libre — el mismo camino que usará
-la voz). Las skills corren en un hilo: la UI nunca se congela y siempre hay
-feedback inmediato (⏳ + bolita latiendo).
+Barra de búsqueda grande arriba y una única lista debajo que va cambiando:
+categorías → acciones del grupo → sugerencias mientras escribes → resultados
+clicables. Tamaño fijo y centrado en pantalla: nada se solapa ni se corta.
+
+No sabe nada de skills: todo pasa por el router. Las skills corren en un
+hilo: la UI nunca se congela y siempre hay feedback inmediato.
 """
 
 from __future__ import annotations
@@ -31,54 +32,52 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from rapidfuzz import fuzz
+
 from jarvis import config as config_module
 from jarvis.audio.tts import TTS
 from jarvis.router import Result, Router
 
-WIDTH = 340
-MAX_HEIGHT = 540
+WIDTH = 480
+HEIGHT = 580
 MAX_ITEMS = 8
+MAX_SUGGESTIONS = 7
+SUGGESTION_CUTOFF = 55
 
 STYLE = """
-QWidget#panel { background: #1e2430; border-radius: 14px; }
+QWidget#panel {
+    background: #1b202b; border-radius: 16px;
+    border: 1px solid #2e3746;
+}
 QLabel { color: #e8ecf4; }
-QLabel#title { font-weight: bold; font-size: 14px; letter-spacing: 2px; }
-QLabel#latency { color: #66738a; font-size: 11px; }
+QLabel#hint { color: #66738a; font-size: 12px; padding-left: 4px; }
+QLabel#latency { color: #66738a; font-size: 11px; padding-left: 4px; }
+QLineEdit#search {
+    background: #232b3a; color: #f0f4fb; border: 1px solid #313c50;
+    border-radius: 12px; padding: 12px 16px; font-size: 16px;
+}
+QLineEdit#search:focus { border: 1px solid #3f7cff; }
 QTextEdit#response {
-    background: #141922; color: #e8ecf4; border: none;
-    border-radius: 10px; padding: 6px; font-size: 12px;
+    background: #232b3a; color: #e8ecf4; border: none;
+    border-radius: 12px; padding: 8px; font-size: 13px;
 }
-QPushButton {
-    background: transparent; color: #cfd8e8; border: none;
-    border-radius: 8px; padding: 7px 10px; text-align: left; font-size: 12px;
+QPushButton#row, QPushButton#rowAux {
+    background: transparent; color: #dbe3f0; border: none;
+    border-radius: 10px; padding: 10px 12px; text-align: left; font-size: 14px;
 }
-QPushButton:hover { background: #37445c; color: #ffffff; }
-QPushButton#category {
-    background: #2a3342; font-weight: bold; font-size: 13px;
-    color: #e8ecf4; padding: 9px 12px; border-radius: 10px;
-}
-QPushButton#category:hover { background: #37445c; }
-QPushButton#item {
-    background: #232b3a; padding: 6px 10px; border-radius: 8px;
-}
-QPushButton#item:hover { background: #37445c; }
-QPushButton#itemAux {
-    background: #232b3a; padding: 6px 8px; border-radius: 8px;
-    text-align: center;
-}
-QPushButton#itemAux:hover { background: #37445c; }
-QLineEdit {
-    background: #141922; color: #e8ecf4; border: 1px solid #2a3342;
-    border-radius: 10px; padding: 8px 12px; font-size: 12px;
-}
-QLineEdit:focus { border: 1px solid #2f6fed; }
+QPushButton#row:hover { background: #2c374b; color: #ffffff; }
+QPushButton#rowAux { padding: 10px 10px; text-align: center; }
+QPushButton#rowAux:hover { background: #2c374b; }
 QScrollArea { border: none; background: transparent; }
-QCheckBox { color: #cfd8e8; font-size: 12px; }
+QScrollBar:vertical { background: transparent; width: 8px; }
+QScrollBar::handle:vertical { background: #313c50; border-radius: 4px; min-height: 24px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QCheckBox { color: #aeb9cc; font-size: 12px; }
 QSlider::groove:horizontal { height: 4px; background: #2a3342; border-radius: 2px; }
 QSlider::handle:horizontal {
     width: 12px; margin: -5px 0; background: #8fa3c4; border-radius: 6px;
 }
-QSlider::sub-page:horizontal { background: #2f6fed; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: #3f7cff; border-radius: 2px; }
 QToolTip { background: #141922; color: #e8ecf4; border: 1px solid #37445c; }
 """
 
@@ -119,45 +118,41 @@ class Panel(QWidget):
         frame.setStyleSheet(STYLE)
         outer.addWidget(frame)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(16, 16, 16, 12)
+        layout.setSpacing(10)
 
-        layout.addWidget(QLabel("✨ JARVIS", objectName="title"))
+        self.input = QLineEdit(objectName="search")
+        self.input.setPlaceholderText("🔍  Pídeme algo o elige una acción…")
+        self.input.returnPressed.connect(self._on_text)
+        self.input.textChanged.connect(self._on_typing)
+        layout.addWidget(self.input)
 
-        # Acordeón: solo los grupos a la vista; uno abierto a la vez.
-        menu = QWidget()
-        menu_layout = QVBoxLayout(menu)
-        menu_layout.setContentsMargins(0, 0, 0, 0)
-        menu_layout.setSpacing(4)
-        self._open_cat: str | None = None
-        self._sections: dict[str, tuple[QPushButton, QWidget]] = {}
-        for cat_id, cat in self.router.categories.items():
-            header = QPushButton(objectName="category")
-            header.clicked.connect(lambda _=False, c=cat_id: self._toggle(c))
-            menu_layout.addWidget(header)
-            section = QWidget()
-            section_layout = QVBoxLayout(section)
-            section_layout.setContentsMargins(10, 0, 0, 4)
-            section_layout.setSpacing(2)
-            for intent in self.router.intents:
-                if intent.category != cat_id:
-                    continue
-                button = QPushButton(self._button_text(intent))
-                if intent.description:
-                    button.setToolTip(intent.description)
-                button.clicked.connect(lambda _=False, i=intent: self._on_intent(i))
-                section_layout.addWidget(button)
-            section.setVisible(False)
-            menu_layout.addWidget(section)
-            self._sections[cat_id] = (header, section)
-        self._refresh_headers()
-        menu_layout.addStretch(1)
+        self.hint = QLabel("", objectName="hint")
+        layout.addWidget(self.hint)
 
+        self.response = QTextEdit(objectName="response")
+        self.response.setReadOnly(True)  # seleccionable y con scroll
+        self.response.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.response.setMinimumHeight(44)
+        self.response.setMaximumHeight(120)
+        self.response.hide()
+        layout.addWidget(self.response)
+
+        # La lista única: categorías / acciones / sugerencias / resultados
+        rows_host = QWidget()
+        self.rows = QVBoxLayout(rows_host)
+        self.rows.setContentsMargins(0, 0, 4, 0)
+        self.rows.setSpacing(2)
+        self.rows.addStretch(1)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setWidget(menu)
+        scroll.setWidget(rows_host)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(scroll, stretch=1)
+
+        self.latency = QLabel("", objectName="latency")
+        self.latency.hide()
+        layout.addWidget(self.latency)
 
         # Voz del asistente: interruptor + volumen propio (no el del sistema).
         voz_row = QHBoxLayout()
@@ -174,46 +169,116 @@ class Panel(QWidget):
         voz_row.addWidget(self.voz_slider, stretch=1)
         layout.addLayout(voz_row)
 
-        # Texto libre: mismo router que usará la voz.
-        self.input = QLineEdit(placeholderText="Pídeme algo…")
-        self.input.returnPressed.connect(self._on_text)
-        layout.addWidget(self.input)
+        self.setFixedSize(WIDTH, HEIGHT)
+        self._show_categories()
 
-        self.response = QTextEdit(objectName="response")
-        self.response.setReadOnly(True)  # seleccionable y con scroll
-        self.response.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.response.setMinimumHeight(48)
-        self.response.setMaximumHeight(130)
-        self.response.hide()
-        layout.addWidget(self.response)
+    # -- la lista ------------------------------------------------------------
 
-        # Resultados clicables (archivos, carpetas, programas)
-        self.items_box = QWidget()
-        self.items_layout = QVBoxLayout(self.items_box)
-        self.items_layout.setContentsMargins(0, 0, 0, 0)
-        self.items_layout.setSpacing(3)
-        self.items_box.hide()
-        layout.addWidget(self.items_box)
+    def _clear_rows(self) -> None:
+        while self.rows.count() > 1:  # el stretch final se queda
+            widget = self.rows.takeAt(0).widget()
+            if widget:
+                widget.deleteLater()
 
-        self.latency = QLabel("", objectName="latency")
-        self.latency.hide()
-        layout.addWidget(self.latency)
+    def _add_row(self, text: str, on_click, icon=None, tooltip: str = "",
+                 aux: tuple | None = None) -> None:
+        """Una fila de la lista; aux = (emoji, tooltip, callback) opcional."""
+        main = QPushButton(text, objectName="row")
+        if icon is not None:
+            main.setIcon(icon)
+        if tooltip:
+            main.setToolTip(tooltip)
+        main.clicked.connect(lambda _=False: on_click())
+        if aux is None:
+            self.rows.insertWidget(self.rows.count() - 1, main)
+            return
+        holder = QWidget()
+        row = QHBoxLayout(holder)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(2)
+        row.addWidget(main, stretch=1)
+        emoji, aux_tip, aux_cb = aux
+        aux_btn = QPushButton(emoji, objectName="rowAux")
+        aux_btn.setToolTip(aux_tip)
+        aux_btn.clicked.connect(lambda _=False: aux_cb())
+        row.addWidget(aux_btn)
+        self.rows.insertWidget(self.rows.count() - 1, holder)
 
-        self.setFixedWidth(WIDTH)
-        self.setMaximumHeight(MAX_HEIGHT)
+    def _show_categories(self) -> None:
+        self._clear_rows()
+        self.hint.setText("Grupos de acciones — o escribe directamente")
+        for cat_id, cat in self.router.categories.items():
+            self._add_row(
+                f"{cat['icon']}   {cat['label']}",
+                lambda c=cat_id: self._show_category(c),
+            )
 
-    def _toggle(self, cat_id: str) -> None:
-        opening = self._open_cat != cat_id
-        for cid, (_, section) in self._sections.items():
-            section.setVisible(opening and cid == cat_id)
-        self._open_cat = cat_id if opening else None
-        self._refresh_headers()
+    def _show_category(self, cat_id: str) -> None:
+        self._clear_rows()
+        cat = self.router.categories[cat_id]
+        self.hint.setText(f"{cat['icon']} {cat['label']}")
+        self._add_row("←   Volver a los grupos", self._show_categories)
+        for intent in self.router.intents:
+            if intent.category != cat_id:
+                continue
+            self._add_row(
+                "      " + self._button_text(intent),
+                lambda i=intent: self._on_intent(i),
+                tooltip=intent.description,
+            )
 
-    def _refresh_headers(self) -> None:
-        for cat_id, (header, _) in self._sections.items():
-            cat = self.router.categories[cat_id]
-            arrow = "▾" if self._open_cat == cat_id else "▸"
-            header.setText(f"{cat['icon']}  {cat['label']}   {arrow}")
+    def _on_typing(self, text: str) -> None:
+        if self._busy:
+            return
+        text = text.strip()
+        if not text:
+            self._show_categories()
+            return
+        self._show_suggestions(text)
+
+    def _show_suggestions(self, query: str) -> None:
+        self._clear_rows()
+        self.hint.setText("Sugerencias — Enter para enviar tal cual")
+        scored = []
+        for intent in self.router.intents:
+            score = fuzz.WRatio(query.lower(), intent.label.lower())
+            for pattern in intent.patterns:
+                base = pattern.split("{")[0].strip()
+                if base:
+                    score = max(score, fuzz.WRatio(query.lower(), base))
+            if score >= SUGGESTION_CUTOFF:
+                scored.append((score, intent))
+        scored.sort(key=lambda pair: -pair[0])
+        for _, intent in scored[:MAX_SUGGESTIONS]:
+            cat = self.router.categories[intent.category]
+            self._add_row(
+                f"{cat['icon']}   {self._button_text(intent)}",
+                lambda i=intent: self._on_intent(i),
+                tooltip=intent.description,
+            )
+        if self.brain is not None and self.brain.enabled:
+            self._add_row(
+                f"🤖   Preguntar a JARVIS: “{query}”",
+                self._on_text,
+            )
+
+    def _show_items(self, items) -> None:
+        self._clear_rows()
+        if not items:
+            return
+        self.hint.setText("Resultados — click para abrir")
+        for item in items[:MAX_ITEMS]:
+            aux = None
+            if item.kind in ("file", "folder"):
+                aux = ("📂", "Abrir la carpeta que lo contiene",
+                       lambda i=item: self._open_location(i))
+            self._add_row(
+                item.label,
+                lambda i=item: self._open_item(i),
+                icon=self._icons.icon(QFileInfo(item.path)),
+                tooltip=item.path,
+                aux=aux,
+            )
 
     @staticmethod
     def _button_text(intent) -> str:
@@ -286,7 +351,7 @@ class Panel(QWidget):
         self._placeholder = True
         self.response.setPlainText(f"⏳ {label}…")
         self.response.show()
-        self._clear_items()
+        self._clear_rows()
         self.latency.hide()
 
     def _on_fast_done(self, result: Result) -> None:
@@ -295,7 +360,10 @@ class Panel(QWidget):
         self.working.emit(False)
         self.response.setPlainText(result.text)
         self.response.show()
-        self._show_items(result.items)
+        if result.items:
+            self._show_items(result.items)
+        else:
+            self._show_categories()
         if self.debug:
             self.latency.setText(
                 f"{result.elapsed_ms:.1f} ms · intent={result.intent_id}"
@@ -316,41 +384,13 @@ class Panel(QWidget):
         self._busy = False
         self._placeholder = False
         self.working.emit(False)
+        self._show_categories()
         if self.debug:
             self.latency.setText(f"{elapsed_ms:.0f} ms · slow path (LLM)")
             self.latency.show()
         self.tts.speak(full)
 
     # -- resultados clicables ------------------------------------------------
-
-    def _clear_items(self) -> None:
-        while self.items_layout.count():
-            widget = self.items_layout.takeAt(0).widget()
-            if widget:
-                widget.deleteLater()
-        self.items_box.hide()
-
-    def _show_items(self, items) -> None:
-        self._clear_items()
-        if not items:
-            return
-        for item in items[:MAX_ITEMS]:
-            row = QHBoxLayout()
-            row.setSpacing(3)
-            main = QPushButton(item.label, objectName="item")
-            main.setIcon(self._icons.icon(QFileInfo(item.path)))
-            main.setToolTip(item.path)
-            main.clicked.connect(lambda _=False, i=item: self._open_item(i))
-            row.addWidget(main, stretch=1)
-            if item.kind in ("file", "folder"):
-                aux = QPushButton("📂", objectName="itemAux")
-                aux.setToolTip("Abrir la carpeta que lo contiene")
-                aux.clicked.connect(lambda _=False, i=item: self._open_location(i))
-                row.addWidget(aux)
-            holder = QWidget()
-            holder.setLayout(row)
-            self.items_layout.addWidget(holder)
-        self.items_box.show()
 
     def _open_item(self, item) -> None:
         try:
@@ -376,19 +416,18 @@ class Panel(QWidget):
     # -- posición / teclado --------------------------------------------------
 
     def show_near(self, ball_geometry) -> None:
-        """Encima de la bolita, sin salirse de la pantalla."""
+        """Centrado en la pantalla donde vive la bolita, estilo lanzador."""
         # reflejar cambios hechos por comando ("desactiva la voz")
         self.voz_check.blockSignals(True)
         self.voz_check.setChecked(self.tts.enabled)
         self.voz_check.blockSignals(False)
         area = self.screen().availableGeometry()
-        self.adjustSize()
-        x = min(ball_geometry.x(), area.right() - self.width() - 8)
-        y = ball_geometry.y() - self.height() - 8
-        if y < area.top():
-            y = ball_geometry.bottom() + 8
-        self.move(max(area.left() + 8, x), y)
+        x = area.center().x() - self.width() // 2
+        y = area.top() + int(area.height() * 0.16)
+        self.move(x, y)
         self.show()
+        self.raise_()
+        self.activateWindow()
         self.input.setFocus()
 
     def keyPressEvent(self, event) -> None:
