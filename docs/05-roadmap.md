@@ -7,10 +7,14 @@ temporal — se queda siempre como ayuda de accesibilidad.
 
 Cada fase termina con algo usable; no se avanza sin validar la anterior.
 
-**Estado (01/09/2026): fases 0-4 ✅ completadas** (con mucho extra de UX:
+**Estado (01/09/2026): fases 0-5 ✅ completadas** (con mucho extra de UX:
 panel lanzador, temas, ajustes, atajo global, personalización por comandos,
 correo con HTML/adjuntos). De la fase 6 ya están el autoarranque y el icono
-de bandeja. **Queda la fase 5 (voz), a la espera de micrófono.**
+de bandeja. **La fase 5 (voz) quedó implementada al llegar los micrófonos**
+(webcam / Momentum 4 / Barracuda X): «Hey Jarvis» (openWakeWord) → Silero
+VAD → faster-whisper → el router de siempre, con earcon, barge-in y
+selector de micro en Ajustes. Pendiente de fase 6: wake word propia
+(«Jarvis» a secas).
 
 ## Fase 0 — Entorno y repo (½ día)
 

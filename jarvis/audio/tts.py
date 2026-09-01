@@ -48,7 +48,11 @@ class TTS:
         self._piper = None
         self._kokoro = None
         self._load_lock = threading.Lock()
-        self._queue: queue.Queue[str] = queue.Queue()
+        # generación: interrupt() la sube y lo pendiente/sintetizándose
+        # se descarta antes de sonar (sin esto, cortar al TTS mientras
+        # sintetiza dejaba que la frase sonara igual después)
+        self._gen = 0
+        self._queue: queue.Queue[tuple[int, str]] = queue.Queue()
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
         if self.enabled:
@@ -65,6 +69,16 @@ class TTS:
     def preview(self, text: str) -> None:
         """Habla aunque la voz esté desactivada (probar voces del selector)."""
         self._enqueue(text)
+
+    def interrupt(self) -> None:
+        """Corta lo que esté sonando y vacía la cola (barge-in de la voz)."""
+        self._gen += 1
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+        winsound.PlaySound(None, winsound.SND_PURGE)
 
     def preload(self) -> None:
         """Carga el motor en un hilo aparte sin bloquear el arranque."""
@@ -112,34 +126,35 @@ class TTS:
         text = normalizar(text, self.replacements)
         if not text:
             return
+        self._gen += 1
         while not self._queue.empty():
             try:
                 self._queue.get_nowait()
             except queue.Empty:
                 break
         winsound.PlaySound(None, winsound.SND_PURGE)  # corta lo que suene
-        self._queue.put(text)
+        self._queue.put((self._gen, text))
 
     def _run(self) -> None:
         while True:
-            text = self._queue.get()
+            gen, text = self._queue.get()
             try:
                 self._on_speaking(True)
-                self._speak(text)
+                self._speak(gen, text)
             except Exception:
                 pass  # sin voz no se rompe nada: la respuesta ya está en pantalla
             finally:
                 self._on_speaking(False)
 
-    def _speak(self, text: str) -> None:
+    def _speak(self, gen: int, text: str) -> None:
         if self.voice_name in KOKORO_VOICES:
-            self._speak_kokoro(text)
+            self._speak_kokoro(gen, text)
         else:
-            self._speak_piper(text)
+            self._speak_piper(gen, text)
 
     # -- Piper ---------------------------------------------------------------
 
-    def _speak_piper(self, text: str) -> None:
+    def _speak_piper(self, gen: int, text: str) -> None:
         voice = self._load_engine()
         if voice is None:
             return
@@ -168,11 +183,13 @@ class TTS:
         with wave.open(salida, "wb") as wav:
             wav.setparams(params)
             wav.writeframes(silencio.join(frames))
+        if gen != self._gen:  # interrumpido mientras se sintetizaba
+            return
         winsound.PlaySound(salida.getvalue(), winsound.SND_MEMORY)
 
     # -- Kokoro --------------------------------------------------------------
 
-    def _speak_kokoro(self, text: str) -> None:
+    def _speak_kokoro(self, gen: int, text: str) -> None:
         engine = self._load_engine()
         if engine is None:
             return
@@ -188,6 +205,8 @@ class TTS:
             wav.setsampwidth(2)
             wav.setframerate(framerate)
             wav.writeframes(samples.astype(np.int16).tobytes())
+        if gen != self._gen:  # interrumpido mientras se sintetizaba
+            return
         winsound.PlaySound(salida.getvalue(), winsound.SND_MEMORY)
 
     # -- carga ---------------------------------------------------------------

@@ -1,8 +1,8 @@
 """La bolita: widget circular sin marco, siempre encima, arrastrable.
 
-Estados (color): reposo (azul), trabajando (ámbar), hablando (verde).
-Click sin arrastre → abre/cierra el panel. Permanente como ayuda de
-accesibilidad; cuando llegue la voz ganará el estado "escuchando".
+Estados (color): reposo (azul), trabajando (ámbar), hablando (verde),
+escuchando (violeta, tras "Hey Jarvis"). Click sin arrastre → abre/cierra
+el panel. Permanente como ayuda de accesibilidad.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ COLORS = {
     "idle": QColor("#2f6fed"),
     "working": QColor("#e8a13c"),
     "speaking": QColor("#2fae5f"),
+    "listening": QColor("#9a5cf0"),
 }
 
 
@@ -46,7 +47,7 @@ class Ball(QWidget):
 
     def set_state(self, state: str) -> None:
         self._state = state if state in COLORS else "idle"
-        if self._state in ("working", "speaking"):  # latido: se ve que trabaja
+        if self._state in ("working", "speaking", "listening"):  # latido
             self._pulse.start()
         else:
             self._pulse.stop()

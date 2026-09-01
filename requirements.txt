@@ -25,3 +25,10 @@ APScheduler==3.11.3
 SQLAlchemy==2.0.52
 feedparser==6.0.14
 keyring==25.7.0
+# Fase 5 — voz: micro, wake word, VAD y STT
+sounddevice==0.5.6
+openwakeword==0.6.0
+faster-whisper==1.2.1
+# cuBLAS/cuDNN para faster-whisper en GPU (perfiles full/gpu-lite)
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cudnn-cu12==9.25.1.1

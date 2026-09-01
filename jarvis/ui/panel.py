@@ -56,6 +56,20 @@ GLYPH_MUTE = chr(0xE74F)
 CONSOLE_IDS = {"anterior", "play_pausa", "siguiente"}  # activa el mando
 
 
+class ComboAjustes(QComboBox):
+    """Combo para Ajustes: ignora la rueda (que hacer scroll por la lista
+    no cambie el tema/voz/micro al pasar por encima) y elide el contenido
+    largo en vez de ensanchar la tarjeta (nombres de micrófono eternos)."""
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.setMinimumContentsLength(12)
+
+    def wheelEvent(self, event) -> None:
+        event.ignore()  # la rueda sigue haciendo scroll de la lista
+
 
 class Panel(QWidget):
     working = Signal(bool)  # para que la bolita cambie de estado
@@ -66,6 +80,9 @@ class Panel(QWidget):
     mail_result = Signal(str)  # resultado de enlazar/desenlazar el correo
     ball_visible = Signal(bool)  # mostrar/ocultar la bolita desde Ajustes
     hotkey_changed = Signal(str)  # nueva combinación de teclas global
+    voice_text = Signal(str)  # comando transcrito (desde el hilo de audio)
+    voice_state = Signal(str)  # listening / transcribing / idle (ídem)
+    followup = Signal()  # tras hablar una pregunta por voz: seguir escuchando
 
     def __init__(self, router: Router, debug: bool = False, brain=None):
         super().__init__(
@@ -75,6 +92,9 @@ class Panel(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.router = router
         self.brain = brain
+        self.voice = None  # VoiceInput; lo deja app.run() tras construir
+        self._voice_mode = False  # la orden en curso llegó por el micro
+        self._followup_armed = False  # la respuesta hablada acaba en pregunta
         self.debug = debug
         self._busy = False
         self._placeholder = False  # la respuesta muestra el "⏳…" inicial
@@ -88,6 +108,7 @@ class Panel(QWidget):
         self._busy_label = ""
         self._busy_timer = QTimer(self, interval=400, timeout=self._busy_tick)
         self._build()
+        self.speaking.connect(self._on_speaking_changed)
         self.fast_done.connect(self._on_fast_done)
         self.token.connect(self._on_token)
         self.llm_done.connect(self._on_llm_done)
@@ -441,7 +462,7 @@ class Panel(QWidget):
         self.voz_check.setChecked(self.tts.enabled)
         self.voz_check.toggled.connect(self._on_voz_toggled)
         fila.addWidget(self.voz_check)
-        self.voz_combo = QComboBox()
+        self.voz_combo = ComboAjustes()
         self.voz_combo.setToolTip("Al cambiar de voz, la oyes")
         for voice in TTS.installed_voices():
             self.voz_combo.addItem(self._voice_label(voice), voice)
@@ -465,6 +486,44 @@ class Panel(QWidget):
         fila.addWidget(mas)
         voz.addLayout(fila)
 
+        # ---- Micrófono (fase 5: «Hey Jarvis») ----
+        micro = self._settings_card("🎤  Micrófono («Hey Jarvis»)")
+        voz_cfg = self.router.config.get("voice", {}) or {}
+        soportado = self.voice is not None and self.voice.supported
+        fila_mic = QHBoxLayout()
+        fila_mic.setSpacing(8)
+        self.mic_check = QCheckBox("Escuchar")
+        self.mic_check.setToolTip("Di «Hey Jarvis» y, tras el tono, el comando")
+        self.mic_check.setChecked(soportado and bool(voz_cfg.get("enabled", True)))
+        self.mic_check.setEnabled(soportado)
+        self.mic_check.toggled.connect(self._on_mic_toggled)
+        fila_mic.addWidget(self.mic_check)
+        self.mic_combo = ComboAjustes()
+        self.mic_combo.setToolTip(
+            "«Automático» elige por preferencia: webcam → Momentum 4 → Barracuda X"
+        )
+        self.mic_combo.addItem("Automático", "auto")
+        try:
+            from jarvis.audio.voice import list_mics
+
+            for nombre in list_mics():
+                self.mic_combo.addItem(nombre, nombre)
+        except Exception:
+            pass
+        indice_mic = self.mic_combo.findData(str(voz_cfg.get("mic", "auto")))
+        if indice_mic >= 0:
+            self.mic_combo.setCurrentIndex(indice_mic)
+        self.mic_combo.currentIndexChanged.connect(self._on_mic_cambiado)
+        fila_mic.addWidget(self.mic_combo, stretch=1)
+        micro.addLayout(fila_mic)
+        self._mic_status = QLabel(
+            self.voice.status if self.voice is not None
+            else "La voz arranca con el asistente."
+        )
+        self._mic_status.setWordWrap(True)
+        self._mic_status.setStyleSheet("color: #aeb9cc; font-size: 12px;")
+        micro.addWidget(self._mic_status)
+
         # ---- Interfaz ----
         interfaz = self._settings_card("🖥️  Interfaz")
         ui_config = self.router.config.get("ui", {}) or {}
@@ -478,7 +537,7 @@ class Panel(QWidget):
         tema_fila = QHBoxLayout()
         tema_fila.setSpacing(8)
         tema_fila.addWidget(QLabel("Tema:"))
-        self.theme_combo = QComboBox()
+        self.theme_combo = ComboAjustes()
         for etiqueta, valor in (
             ("Como el sistema", "system"), ("Oscuro", "dark"), ("Claro", "light")
         ):
@@ -545,6 +604,21 @@ class Panel(QWidget):
         enlazar.clicked.connect(self._on_mail_enlazar)
         botones.addWidget(enlazar)
         correo.addLayout(botones)
+
+    def _on_mic_toggled(self, checked: bool) -> None:
+        config_module.save_local({"voice": {"enabled": checked}})
+        self.router.config.setdefault("voice", {})["enabled"] = checked
+        if self.voice is not None:
+            self.voice.set_enabled(checked)
+
+    def _on_mic_cambiado(self, index: int) -> None:
+        valor = self.mic_combo.itemData(index)
+        if not valor:
+            return
+        config_module.save_local({"voice": {"mic": valor}})
+        self.router.config.setdefault("voice", {})["mic"] = valor
+        if self.voice is not None:
+            self.voice.set_mic(valor)
 
     def _on_theme(self, index: int) -> None:
         valor = self.theme_combo.itemData(index)
@@ -687,6 +761,16 @@ class Panel(QWidget):
         self._start_busy(text)
         threading.Thread(target=self._text_worker, args=(text,), daemon=True).start()
 
+    def submit_voice(self, text: str) -> None:
+        """Comando llegado por voz: mismo camino que el texto escrito, pero
+        sin abrir el panel (la ventana solo se ve si ya estaba abierta) y
+        con la respuesta SIEMPRE hablada, esté o no activada la voz."""
+        if self._busy or self._pending_intent is not None:
+            return
+        self._voice_mode = True
+        self.input.setText(text)
+        self._on_text()
+
     def _text_worker(self, text: str) -> None:
         result = self.router.handle(text)
         if result.matched or self.brain is None or not self.brain.enabled:
@@ -769,8 +853,13 @@ class Panel(QWidget):
             self.latency.show()
         # speak="" = acción evidente, no se dicta; None = se lee el texto
         hablado = result.speak if result.speak is not None else result.text
+        voz = self._voice_mode
+        self._voice_mode = False
         if hablado:
-            self.tts.speak(hablado)
+            # por voz se contesta hablando aunque el TTS esté desactivado;
+            # si la respuesta es una pregunta, se seguirá escuchando
+            self._followup_armed = voz and "?" in hablado
+            self.tts.preview(hablado) if voz else self.tts.speak(hablado)
 
     def _on_token(self, token: str) -> None:
         if self._placeholder:
@@ -789,6 +878,8 @@ class Panel(QWidget):
         self._placeholder = False
         self._busy_timer.stop()
         self.working.emit(False)
+        voz = self._voice_mode
+        self._voice_mode = False
         # si el LLM dejó un borrador de correo pendiente, botones a la vista
         try:
             from jarvis.results import Item
@@ -806,7 +897,15 @@ class Panel(QWidget):
         if self.debug:
             self.latency.setText(f"{elapsed_ms:.0f} ms · slow path (LLM)")
             self.latency.show()
-        self.tts.speak(full)
+        self._followup_armed = voz and "?" in full
+        self.tts.preview(full) if voz else self.tts.speak(full)
+
+    def _on_speaking_changed(self, talking: bool) -> None:
+        # el TTS terminó de leer una pregunta hecha por voz → que el micro
+        # espere la respuesta sin exigir otro "Hey Jarvis"
+        if not talking and self._followup_armed:
+            self._followup_armed = False
+            self.followup.emit()
 
     # -- resultados clicables ------------------------------------------------
 

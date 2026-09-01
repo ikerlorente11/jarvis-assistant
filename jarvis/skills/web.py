@@ -52,15 +52,19 @@ def _lanzar(config: dict, url: str, pantalla: str | None, nueva: bool,
 
 def abrir(config: dict, url: str):
     destino, pantalla, nueva = _extraer_sufijos(url)
+    destino = destino.strip(" .")  # puntuación colada del dictado
     alias = config.get("sites", {}) or {}
     destino = alias.get(destino.lower(), destino)
     if not destino.startswith(("http://", "https://")):
         if not DOMINIO.match(destino):
-            candidato = destino.replace(" ", "")
-            if not DOMINIO.match(candidato + ".com"):
+            candidato = destino.replace(" ", "").strip(".")
+            if DOMINIO.match(candidato):  # "youtube . com" dictado con pausas
+                destino = candidato
+            elif "." not in candidato and DOMINIO.match(candidato + ".com"):
+                destino = candidato + ".com"
+            else:
                 # no parece una dirección: lo buscamos en internet
                 return buscar(config, url)
-            destino = candidato + ".com"
         destino = "https://" + destino
     etiqueta = destino.removeprefix("https://").removeprefix("http://")
     return _lanzar(config, destino, pantalla, nueva, etiqueta)

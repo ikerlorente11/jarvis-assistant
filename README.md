@@ -31,11 +31,18 @@ obligatoria de la nube.
 
 ## Estado actual (sept. 2026)
 
-**Fases 0-4 completadas** + gran parte de la 6. Falta solo la **voz (fase 5)**,
-a la espera de micrófono — se enchufará al router existente sin tocar el motor.
+**Fases 0-5 completadas** + gran parte de la 6: el asistente ya se maneja
+**por voz** («Hey Jarvis» + comando) además de por bolita/teclado. Queda de
+la fase 6 la wake word personalizada («Jarvis» a secas) y pulido continuo.
 
 Lo que ya funciona:
 
+- **Voz (fase 5)**: openWakeWord («Hey Jarvis») siempre escuchando con
+  consumo mínimo → earcon inmediato + bolita en violeta → Silero VAD detecta
+  el final del comando → faster-whisper (GPU según perfil) → el mismo router
+  de siempre. Decir «Hey Jarvis» corta al TTS (barge-in) y «para» lo calla.
+  El micrófono se elige por preferencia configurable (webcam → Momentum 4 →
+  Barracuda X) con selector en Ajustes; un bluetooth apagado se salta solo.
 - **Panel lanzador** estilo Spotlight (bolita flotante opcional + atajo global
   `Ctrl+Alt+J` + icono en bandeja), temas claro/oscuro/sistema, sugerencias en
   vivo al escribir, resultados clicables con iconos, mando multimedia con

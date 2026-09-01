@@ -44,7 +44,8 @@ if (-not (Test-Path "models\kokoro\kokoro-v1.0.onnx")) {
 }
 
 # 4. Modelos según el perfil detectado
-$profileOut = & .\.venv\Scripts\python.exe -m jarvis.profile
+# -join: python devuelve varias líneas y -match sobre un array no rellena $Matches
+$profileOut = (& .\.venv\Scripts\python.exe -m jarvis.profile) -join "`n"
 Write-Host $profileOut
 if ($profileOut -match "LLM:\s+(qwen\S+)") {
     $model = $Matches[1]
@@ -53,5 +54,9 @@ if ($profileOut -match "LLM:\s+(qwen\S+)") {
 } else {
     Write-Host "[ok] Perfil sin LLM: no se descarga modelo"
 }
+
+# 5. Voz (fase 5): wake word "hey jarvis" + modelo Whisper del perfil
+Write-Host "[..] Descargando modelos de voz (wake word + Whisper)..."
+& .\.venv\Scripts\python.exe -m jarvis.audio.voice --setup
 
 Write-Host "`n[ok] Instalación completada. Prueba: .\.venv\Scripts\python.exe -m jarvis.profile"

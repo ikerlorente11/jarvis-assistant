@@ -176,6 +176,46 @@ def prevision(config: dict, dias: str = "7", ciudad: str | None = None) -> str:
     return Rich(texto, html=html, speak=resumen)
 
 
+def ubicacion(config: dict) -> str:
+    """¿Dónde estamos? — la ubicación real, nunca inventada: GPS de Windows
+    con nombre completo; si está denegado, ciudad aproximada por IP."""
+    fijada = (config.get("city") or "auto").strip()
+    if fijada.lower() != "auto":
+        return f"Estamos en {fijada} (ciudad fijada en config.yaml)."
+    coords = _windows_location()
+    if coords:
+        lat, lon = coords
+        detalle = _lugar_detallado(lat, lon)
+        if detalle:
+            return f"Estamos en {detalle}."
+        return (f"Estamos en {lat:.4f}, {lon:.4f} "
+                "(no he podido ponerle nombre al sitio).")
+    auto = _detectar_ubicacion()
+    if auto:
+        return f"Estamos en {auto['name']} (aproximado, por IP)."
+    return ("No he podido detectar la ubicación: activa la ubicación de "
+            "Windows o pon `city: TuCiudad` en config.yaml.")
+
+
+def _lugar_detallado(lat: float, lon: float) -> str | None:
+    """«Ciudad, provincia, país» con geocoding inverso gratuito."""
+    try:
+        datos = requests.get(
+            "https://api.bigdatacloud.net/data/reverse-geocode-client",
+            params={"latitude": lat, "longitude": lon, "localityLanguage": "es"},
+            timeout=6,
+        ).json()
+    except (requests.RequestException, ValueError):
+        return None
+    partes = [
+        datos.get("city") or datos.get("locality"),
+        datos.get("principalSubdivision"),
+        datos.get("countryName"),
+    ]
+    unicas = list(dict.fromkeys(p for p in partes if p))
+    return ", ".join(unicas) if unicas else None
+
+
 def _geolocalizar(config: dict, ciudad: str | None) -> dict | str:
     """→ dict con name/latitude/longitude; str = mensaje de error."""
     lugar = (ciudad or config.get("city") or "auto").strip()

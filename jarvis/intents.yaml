@@ -44,6 +44,18 @@ categories:
           - "tiempo para los próximos {dias} días"
           - "qué tiempo hará estos {dias} días"
         skill: weather.prevision
+      - id: ubicacion
+        label: "¿Dónde estamos?"
+        description: "La ubicación real del equipo (GPS de Windows; si no, aproximada por IP)."
+        patterns:
+          - "dónde estamos"
+          - "dónde estoy"
+          - "en qué ciudad estamos"
+          - "en qué ciudad estoy"
+          - "qué ciudad es esta"
+          - "cuál es mi ubicación"
+          - "mi ubicación"
+        skill: weather.ubicacion
       - id: noticias
         label: "Las noticias"
         description: "Titulares de tus feeds RSS (configurables en `feeds` de config.yaml)."
@@ -75,6 +87,17 @@ categories:
         patterns: ["abre el navegador", "abrir navegador"]
         skill: apps.abrir
         params: { app: navegador }
+      - id: cerrar_ventana
+        label: "Cerrar ventana: {ventana}"
+        description: "Cierra la ventana cuyo título encaje: un programa, una web abierta… Ej.: cierra youtube, cierra la ventana de spotify."
+        patterns:
+          - "cierra la ventana de {ventana}"
+          - "cierra la ventana del {ventana}"
+          - "cierra la ventana {ventana}"
+          - "cierra {ventana}"
+          - "cierra el {ventana}"
+          - "cierra la {ventana}"
+        skill: screens.cerrar_ventana
       - id: abrir_web
         label: "Abrir web: {url}"
         description: "Abre una dirección o alias; admite «… en la pantalla principal/secundaria» y «… en una ventana nueva». Si no parece una dirección, lo busca."
@@ -308,6 +331,17 @@ categories:
           - "busca correos de {remitente}"
           - "correos de {remitente}"
         skill: mail.de_remitente
+      - id: whatsapp_enviar
+        label: "WhatsApp a… {peticion}"
+        description: "Abre el chat con el mensaje ya escrito; tú lo revisas y le das a enviar. Ej.: a 612345678 diciendo que llego tarde · a mamá que diga hola (contactos en `phones` de config.yaml)."
+        patterns:
+          - "envía un whatsapp {peticion}"
+          - "manda un whatsapp {peticion}"
+          - "envía un mensaje de whatsapp {peticion}"
+          - "manda un mensaje de whatsapp {peticion}"
+          - "envía un mensaje por whatsapp {peticion}"
+          - "whatsapp {peticion}"
+        skill: whatsapp.enviar
       - id: correo_enviar
         label: "Enviar correo: {peticion}"
         description: "Redacta el correo y te lo enseña antes de enviar. Admite «bonito» (HTML con estilo) y «con el archivo X adjunto» (lo busca solo). Ej.: a maria@x.com diciendo que llego tarde"
@@ -336,12 +370,15 @@ categories:
         label: "Confirmar envío"
         hidden: true
         no_tool: true  # confirmar es SIEMPRE del humano, nunca del LLM
-        description: "Envía el borrador pendiente."
-        patterns: ["envíalo", "mándalo", "confirma el envío", "sí envíalo"]
-        skill: mail.confirmar
+        description: "Envía el borrador pendiente (correo o whatsapp)."
+        patterns: ["envíalo", "mándalo", "confirma el envío", "sí envíalo",
+                   "envía el whatsapp", "envía el mensaje",
+                   "sí", "vale", "dale", "venga", "adelante"]
+        skill: confirm.confirmar
       - id: correo_cancelar
         label: "Descartar borrador"
         hidden: true
-        description: "Descarta el borrador pendiente."
-        patterns: ["no lo envíes", "descarta el correo", "cancela el correo"]
-        skill: mail.cancelar
+        description: "Descarta el borrador pendiente (correo o whatsapp)."
+        patterns: ["no lo envíes", "descarta el correo", "cancela el correo",
+                   "descártalo", "cancela el mensaje", "no lo mandes", "no"]
+        skill: confirm.cancelar

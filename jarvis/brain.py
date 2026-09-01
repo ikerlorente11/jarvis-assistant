@@ -9,6 +9,7 @@ callback para pintarla token a token.
 from __future__ import annotations
 
 import json
+import threading
 from collections import deque
 from datetime import datetime
 
@@ -81,6 +82,20 @@ class Brain:
         self.enabled = profile.llm_enabled and self.model is not None
         self.history: deque[dict] = deque(maxlen=12)  # últimas 6 interacciones
         self._tools = self._build_tools()
+        if self.enabled:
+            # cargar el modelo en VRAM ya (keep_alive=-1): que la primera
+            # pregunta real no pague los ~20 s de carga
+            threading.Thread(target=self._warm, daemon=True).start()
+
+    def _warm(self) -> None:
+        try:
+            requests.post(
+                f"{OLLAMA}/api/chat",
+                json={"model": self.model, "messages": [], "keep_alive": -1},
+                timeout=(5, 300),
+            )
+        except requests.RequestException:
+            pass  # sin Ollama, available() ya avisa al usar el LLM
 
     # -- API -----------------------------------------------------------------
 

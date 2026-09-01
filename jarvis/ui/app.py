@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap, QRadialGradient
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -29,7 +29,7 @@ def _tray_icon() -> QIcon:
     return QIcon(pixmap)
 
 
-def run(router: Router, brain=None, debug: bool = False) -> int:
+def run(router: Router, brain=None, profile=None, debug: bool = False) -> int:
     from jarvis.ui.hotkey import GlobalHotkey
 
     app = QApplication(sys.argv)
@@ -52,6 +52,64 @@ def run(router: Router, brain=None, debug: bool = False) -> int:
         lambda talking: ball.set_state("speaking" if talking else "idle")
     )
     panel.ball_visible.connect(ball.setVisible)
+
+    # Voz (fase 5): "Hey Jarvis" → transcripción → el mismo router del panel.
+    if profile is not None:
+        from jarvis.audio.voice import VoiceInput, _config_voz
+
+        voice = VoiceInput(
+            router.config,
+            profile,
+            on_text=panel.voice_text.emit,  # señales Qt: seguras entre hilos
+            on_state=panel.voice_state.emit,
+        )
+        panel.voice = voice
+
+        # Por voz no se abre la ventana: se responde hablando. La bolita da
+        # la cara durante la conversación aunque esté desactivada — aparece
+        # al oír "Hey Jarvis" y se esconde cuando termina de responder.
+        flags = {"conversando": False, "trabajando": False, "hablando": False}
+        hide_timer = QTimer(interval=1500, singleShot=True)
+
+        def _fin_conversacion() -> None:
+            if not flags["conversando"]:
+                return
+            if flags["trabajando"] or flags["hablando"]:
+                hide_timer.start()  # aún en ello: reintentar luego
+                return
+            flags["conversando"] = False
+            if not (router.config.get("ui", {}) or {}).get("ball", True):
+                ball.hide()
+
+        hide_timer.timeout.connect(_fin_conversacion)
+
+        panel.voice_text.connect(panel.submit_voice)
+
+        def _voice_state(estado: str) -> None:
+            if estado == "listening":
+                flags["conversando"] = True
+                hide_timer.stop()
+                ball.setVisible(True)
+                ball.set_state("listening")
+            elif estado == "transcribing":
+                ball.set_state("working")
+            else:  # idle: si no viene ya un comando detrás, esconderse
+                ball.set_state("idle")
+                hide_timer.start()
+
+        panel.voice_state.connect(_voice_state)
+
+        def _flag(clave: str, valor: bool) -> None:
+            flags[clave] = valor
+            if not valor:
+                hide_timer.start()
+
+        panel.working.connect(lambda b: _flag("trabajando", b))
+        panel.speaking.connect(lambda b: _flag("hablando", b))
+        panel.followup.connect(voice.follow_up)
+        if voice.supported and _config_voz(router.config).get("enabled", True):
+            voice.start()
+        app.aboutToQuit.connect(voice.stop)
 
     ui_config = router.config.get("ui", {}) or {}
     hotkey = GlobalHotkey(app, toggle_panel)

@@ -60,7 +60,7 @@ def main() -> None:
 
     from jarvis.ui.app import run  # import tardío: PySide6 pesa
 
-    raise SystemExit(run(router, brain=brain, debug=args.debug))
+    raise SystemExit(run(router, brain=brain, profile=profile, debug=args.debug))
 
 
 if __name__ == "__main__":

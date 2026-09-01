@@ -9,6 +9,27 @@ ui:
   ball: true            # false = sin bolita (abre con el atajo)
   hotkey: ctrl+alt+j
 
+# Entrada por voz (fase 5): "Hey Jarvis" + comando dictado.
+voice:
+  enabled: true
+  # Micrófono: auto = el primero disponible de preferred_mics (o el
+  # predeterminado de Windows). También vale un nombre del selector de Ajustes.
+  mic: auto
+  # Orden de preferencia con mic=auto (por trozo del nombre, da igual
+  # mayúsculas): micro de la webcam (Trust USB) → Momentum 4 → Barracuda X.
+  preferred_mics: [trust, webcam, momentum, barracuda]
+  # Sensibilidad de "Hey Jarvis" (menor = más sensible). Calibrado con la
+  # voz del usuario (01/09/2026): sus intentos puntúan 0.10-0.39 y el ruido
+  # ambiente 0.00-0.02 → 0.10 los caza todos con margen sobre el ruido.
+  # Si algún día salta solo, subir a 0.12-0.15.
+  wake_threshold: 0.10
+  # Con verificador entrenado (python -m jarvis.audio.voice --entrenar) el
+  # score es la probabilidad de que seas TÚ diciéndolo. Validado 01/09/2026:
+  # tomas del usuario 0.48-0.80, habla normal ≤0.01 → 0.45 lo coge todo.
+  wake_threshold_verified: 0.45
+  silence_ms: 800       # silencio que marca el final del comando
+  max_command_s: 12     # tope de grabación por comando
+
 # Salida hablada (Piper) — activable aunque se use solo la bolita.
 # El interruptor y el volumen del panel se guardan en config.local.yaml.
 tts:
@@ -57,3 +78,8 @@ feeds:
 # Contactos para "envía un correo a mamá diciendo…": nombre → dirección
 contacts: {}
 #  mamá: ejemplo@gmail.com
+
+# Teléfonos para "envía un whatsapp a mamá diciendo…": nombre → número
+# (sin prefijo se asume +34)
+phones: {}
+#  mamá: 612345678

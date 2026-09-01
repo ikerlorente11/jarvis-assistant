@@ -128,7 +128,34 @@ def _installed_apps() -> dict[str, str]:
             if any(p in nombre for p in EXCLUIR):
                 continue
             indice[lnk.stem] = str(lnk)  # el .lnk pisa al exe: mejor nombre
+    for nombre, appid in _store_apps():
+        # apps de la Microsoft Store (WhatsApp, Spotify…): sin .lnk clásico
+        indice.setdefault(nombre, "shell:AppsFolder\\" + appid)
     return indice
+
+
+def _store_apps() -> list[tuple[str, str]]:
+    """Apps UWP/Store del menú Inicio: (nombre, AppID). Se lanzan con
+    os.startfile("shell:AppsFolder\\<AppID>")."""
+    import subprocess
+
+    try:
+        salida = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "[Console]::OutputEncoding=[Text.Encoding]::UTF8; "
+             "Get-StartApps | ForEach-Object { $_.Name + '|' + $_.AppID }"],
+            capture_output=True, timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        ).stdout.decode("utf-8", errors="replace")
+    except Exception:
+        return []
+    resultado = []
+    for linea in salida.splitlines():
+        nombre, _, appid = linea.partition("|")
+        # el "!" delata un AppID UWP; los clásicos ya están indexados
+        if nombre.strip() and "!" in appid:
+            resultado.append((nombre.strip(), appid.strip()))
+    return resultado
 
 
 def _app_paths() -> list[tuple[str, str]]:
