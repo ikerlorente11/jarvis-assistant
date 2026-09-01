@@ -15,8 +15,8 @@ import subprocess
 import threading
 import time
 
-from PySide6.QtCore import QFileInfo, Qt, Signal
-from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtCore import QFileInfo, Qt, QTimer, Signal
+from PySide6.QtGui import QFont, QIntValidator, QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -45,11 +45,12 @@ MAX_SUGGESTIONS = 7
 SUGGESTION_CUTOFF = 55
 
 # Glifos de Segoe MDL2 Assets (iconos nativos de Windows)
-GLYPH_PREV = ""
-GLYPH_PLAY = ""
-GLYPH_NEXT = ""
-GLYPH_VOLUME = ""
-GLYPH_MUTE = ""
+GLYPH_PREV = chr(0xE892)
+GLYPH_PLAY = chr(0xE768)
+GLYPH_PAUSE = chr(0xE769)
+GLYPH_NEXT = chr(0xE893)
+GLYPH_VOLUME = chr(0xE767)
+GLYPH_MUTE = chr(0xE74F)
 CONSOLE_IDS = {"anterior", "play_pausa", "siguiente"}  # activa el mando
 
 STYLE = """
@@ -101,7 +102,11 @@ QPushButton#step {
     text-align: center; padding: 0;
 }
 QPushButton#step:hover { background: #37445c; }
-QLabel#vozPct { color: #aeb9cc; font-size: 12px; min-width: 38px; }
+QLineEdit#vozPct {
+    background: #232b3a; color: #dbe3f0; border: 1px solid #313c50;
+    border-radius: 8px; padding: 2px; font-size: 12px;
+}
+QLineEdit#vozPct:focus { border: 1px solid #3f7cff; }
 QScrollArea { border: none; background: transparent; }
 QScrollBar:vertical { background: transparent; width: 8px; }
 QScrollBar::handle:vertical { background: #313c50; border-radius: 4px; min-height: 24px; }
@@ -239,10 +244,14 @@ class Panel(QWidget):
         menos.setToolTip("Bajar el volumen de la voz")
         menos.clicked.connect(lambda _=False: self._voz_ajustar(-10))
         voz_row.addWidget(menos)
-        self.voz_pct = QLabel(f"{self.tts.volume} %", objectName="vozPct")
+        self.voz_pct = QLineEdit(str(self.tts.volume), objectName="vozPct")
+        self.voz_pct.setValidator(QIntValidator(0, 100, self))
+        self.voz_pct.setFixedWidth(38)
         self.voz_pct.setAlignment(Qt.AlignCenter)
-        self.voz_pct.setToolTip("Volumen de la voz del asistente")
+        self.voz_pct.setToolTip("Volumen de la voz del asistente (editable)")
+        self.voz_pct.editingFinished.connect(self._on_voz_editado)
         voz_row.addWidget(self.voz_pct)
+        voz_row.addWidget(QLabel("%"))
         mas = QPushButton("+", objectName="step")
         mas.setToolTip("Subir el volumen de la voz")
         mas.clicked.connect(lambda _=False: self._voz_ajustar(+10))
@@ -337,19 +346,28 @@ class Panel(QWidget):
         media = QHBoxLayout()
         media.setSpacing(10)
         media.addStretch(1)
-        for glyph, intent_id, tip in (
-            (GLYPH_PREV, "anterior", "Pista anterior"),
-            (GLYPH_PLAY, "play_pausa", "Play / pausa"),
-            (GLYPH_NEXT, "siguiente", "Siguiente pista"),
-        ):
-            intent = next(i for i in self.router.intents if i.id == intent_id)
-            media.addWidget(
-                self._glyph_button(
-                    glyph, tip, lambda i=intent: self._run_intent(i, None, quiet=True)
-                )
+        por_id = {i.id: i for i in self.router.intents}
+        media.addWidget(
+            self._glyph_button(
+                GLYPH_PREV,
+                "Pista anterior",
+                lambda: self._run_intent(por_id["anterior"], None, quiet=True),
             )
+        )
+        self._play_btn = self._glyph_button(
+            GLYPH_PLAY, "Play / pausa", lambda: self._on_play(por_id["play_pausa"])
+        )
+        media.addWidget(self._play_btn)
+        media.addWidget(
+            self._glyph_button(
+                GLYPH_NEXT,
+                "Siguiente pista",
+                lambda: self._run_intent(por_id["siguiente"], None, quiet=True),
+            )
+        )
         media.addStretch(1)
         box.addLayout(media)
+        self._refresh_play()
 
         vol_row = QHBoxLayout()
         vol_row.setSpacing(8)
@@ -370,6 +388,22 @@ class Panel(QWidget):
         box.addLayout(vol_row)
 
         self.rows.insertWidget(self.rows.count() - 1, card)
+
+    def _on_play(self, intent) -> None:
+        self._run_intent(intent, None, quiet=True)
+        # el reproductor tarda un instante en cambiar de estado
+        QTimer.singleShot(600, self._refresh_play)
+
+    def _refresh_play(self) -> None:
+        """Icono según el estado real de reproducción de Windows."""
+        from jarvis.skills.media import reproduciendo
+
+        try:
+            self._play_btn.setText(
+                GLYPH_PAUSE if reproduciendo() else GLYPH_PLAY
+            )
+        except RuntimeError:
+            pass  # el botón ya no existe (se cambió de vista)
 
     def _set_system_volume(self, value: int) -> None:
         from jarvis.skills.system import _volume_control
@@ -661,9 +695,18 @@ class Panel(QWidget):
         config_module.save_local({"tts": {"enabled": checked}})
 
     def _voz_ajustar(self, delta: int) -> None:
-        nivel = max(0, min(100, self.tts.volume + delta))
+        self._voz_poner(self.tts.volume + delta)
+
+    def _on_voz_editado(self) -> None:
+        try:
+            self._voz_poner(int(self.voz_pct.text() or 0))
+        except ValueError:
+            self.voz_pct.setText(str(self.tts.volume))
+
+    def _voz_poner(self, nivel: int) -> None:
+        nivel = max(0, min(100, nivel))
         self.tts.set_volume(nivel)
-        self.voz_pct.setText(f"{nivel} %")
+        self.voz_pct.setText(str(nivel))
         config_module.save_local({"tts": {"volume": nivel}})
 
     # -- posición / teclado --------------------------------------------------
@@ -674,7 +717,7 @@ class Panel(QWidget):
         self.voz_check.blockSignals(True)
         self.voz_check.setChecked(self.tts.enabled)
         self.voz_check.blockSignals(False)
-        self.voz_pct.setText(f"{self.tts.volume} %")
+        self.voz_pct.setText(str(self.tts.volume))
         area = self.screen().availableGeometry()
         x = area.center().x() - self.width() // 2
         y = area.top() + int(area.height() * 0.16)
