@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSlider,
-    QSpinBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -96,10 +95,13 @@ QPushButton#ctrl {
     min-width: 36px; max-width: 44px; min-height: 36px; text-align: center;
 }
 QPushButton#ctrl:hover { background: #3f7cff; color: #ffffff; }
-QSpinBox {
-    background: #232b3a; color: #dbe3f0; border: 1px solid #313c50;
-    border-radius: 8px; padding: 3px 6px; font-size: 12px;
+QPushButton#step {
+    background: #232b3a; color: #dbe3f0; border: none; border-radius: 8px;
+    min-width: 24px; max-width: 24px; min-height: 24px; font-size: 14px;
+    text-align: center; padding: 0;
 }
+QPushButton#step:hover { background: #37445c; }
+QLabel#vozPct { color: #aeb9cc; font-size: 12px; min-width: 38px; }
 QScrollArea { border: none; background: transparent; }
 QScrollBar:vertical { background: transparent; width: 8px; }
 QScrollBar::handle:vertical { background: #313c50; border-radius: 4px; min-height: 24px; }
@@ -143,6 +145,7 @@ class Panel(QWidget):
         self._placeholder = False  # la respuesta muestra el "⏳…" inicial
         self._pending_intent = None  # intent esperando su valor en la barra
         self._current_cat = None  # grupo abierto: se vuelve a él tras la acción
+        self._quiet = False  # acción de control directo: sin tarjeta de respuesta
         self._icons = QFileIconProvider()
         # emitir una señal Qt desde el hilo del TTS es seguro (conexión en cola)
         self.tts = TTS(router.config, on_speaking=self.speaking.emit)
@@ -230,15 +233,20 @@ class Panel(QWidget):
             self.voz_combo.setCurrentIndex(index)
         self.voz_combo.currentIndexChanged.connect(self._on_voz_cambiada)
         voz_row.addWidget(self.voz_combo)
-        # spinbox, no slider: que no se confunda con el volumen del sistema
-        self.voz_nivel = QSpinBox()
-        self.voz_nivel.setRange(0, 100)
-        self.voz_nivel.setSingleStep(5)
-        self.voz_nivel.setSuffix(" %")
-        self.voz_nivel.setValue(self.tts.volume)
-        self.voz_nivel.setToolTip("Volumen de la voz del asistente")
-        self.voz_nivel.valueChanged.connect(self._on_voz_volumen)
-        voz_row.addWidget(self.voz_nivel)
+        # botones -/+ con etiqueta, no slider: que no se confunda con el
+        # volumen del sistema, y siempre clicables
+        menos = QPushButton("−", objectName="step")
+        menos.setToolTip("Bajar el volumen de la voz")
+        menos.clicked.connect(lambda _=False: self._voz_ajustar(-10))
+        voz_row.addWidget(menos)
+        self.voz_pct = QLabel(f"{self.tts.volume} %", objectName="vozPct")
+        self.voz_pct.setAlignment(Qt.AlignCenter)
+        self.voz_pct.setToolTip("Volumen de la voz del asistente")
+        voz_row.addWidget(self.voz_pct)
+        mas = QPushButton("+", objectName="step")
+        mas.setToolTip("Subir el volumen de la voz")
+        mas.clicked.connect(lambda _=False: self._voz_ajustar(+10))
+        voz_row.addWidget(mas)
         voz_row.addStretch(1)
         layout.addLayout(voz_row)
 
@@ -336,7 +344,9 @@ class Panel(QWidget):
         ):
             intent = next(i for i in self.router.intents if i.id == intent_id)
             media.addWidget(
-                self._glyph_button(glyph, tip, lambda i=intent: self._run_intent(i, None))
+                self._glyph_button(
+                    glyph, tip, lambda i=intent: self._run_intent(i, None, quiet=True)
+                )
             )
         media.addStretch(1)
         box.addLayout(media)
@@ -502,8 +512,11 @@ class Panel(QWidget):
         self.input.setEnabled(True)
         self.input.setFocus()
 
-    def _run_intent(self, intent, slot_value: str | None) -> None:
-        self._start_busy(self._button_text(intent))
+    def _run_intent(self, intent, slot_value: str | None, quiet: bool = False) -> None:
+        """quiet: acción de un control directo (mando) — sin tarjeta de
+        respuesta ni desplazamiento del contenido, salvo error o resultados."""
+        self._quiet = quiet
+        self._start_busy(self._button_text(intent), quiet=quiet)
         threading.Thread(
             target=lambda: self.fast_done.emit(
                 self.router.run_intent(intent.id, slot_value)
@@ -537,14 +550,15 @@ class Panel(QWidget):
 
     # -- feedback ------------------------------------------------------------
 
-    def _start_busy(self, label: str) -> None:
+    def _start_busy(self, label: str, quiet: bool = False) -> None:
         """Feedback inmediato: se ve al instante que está en ello."""
         self._busy = True
         self._t0 = time.perf_counter()
         self.working.emit(True)
-        self._placeholder = True
-        self._set_response(text=f"⏳ {label}…")
-        self.latency.hide()  # la lista NO se toca: sin parpadeos
+        if not quiet:
+            self._placeholder = True
+            self._set_response(text=f"⏳ {label}…")
+            self.latency.hide()  # la lista NO se toca: sin parpadeos
 
     def _set_response(self, text: str | None = None, html: str | None = None) -> None:
         """Pinta la respuesta y ajusta la altura al contenido (sin hueco)."""
@@ -562,6 +576,14 @@ class Panel(QWidget):
         self._busy = False
         self._placeholder = False
         self.working.emit(False)
+        if self._quiet:
+            self._quiet = False
+            # solo interrumpe si hay algo que ver: resultados o un problema
+            if result.items:
+                self._show_items(result.items)
+            elif result.text.startswith(("Error", "No ")):
+                self._set_response(text=result.text)
+            return
         if result.html:
             self._set_response(html=result.html)
         else:
@@ -638,9 +660,11 @@ class Panel(QWidget):
         self.tts.set_enabled(checked)
         config_module.save_local({"tts": {"enabled": checked}})
 
-    def _on_voz_volumen(self, value: int) -> None:
-        self.tts.set_volume(value)
-        config_module.save_local({"tts": {"volume": value}})
+    def _voz_ajustar(self, delta: int) -> None:
+        nivel = max(0, min(100, self.tts.volume + delta))
+        self.tts.set_volume(nivel)
+        self.voz_pct.setText(f"{nivel} %")
+        config_module.save_local({"tts": {"volume": nivel}})
 
     # -- posición / teclado --------------------------------------------------
 
@@ -650,6 +674,7 @@ class Panel(QWidget):
         self.voz_check.blockSignals(True)
         self.voz_check.setChecked(self.tts.enabled)
         self.voz_check.blockSignals(False)
+        self.voz_pct.setText(f"{self.tts.volume} %")
         area = self.screen().availableGeometry()
         x = area.center().x() - self.width() // 2
         y = area.top() + int(area.height() * 0.16)
