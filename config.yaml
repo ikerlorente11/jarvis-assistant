@@ -13,7 +13,7 @@ city: Bilbao
 
 # Alias de programas: lo que dices → comando/ejecutable
 apps:
-  navegador: chrome
+  navegador: default-browser  # valor especial: el predeterminado del sistema
   explorador: explorer
   notas: notepad
   calculadora: calc

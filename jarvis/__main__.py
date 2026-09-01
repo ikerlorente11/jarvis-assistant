@@ -3,13 +3,35 @@
 from __future__ import annotations
 
 import argparse
+import faulthandler
+import sys
+import traceback
+from datetime import datetime
+from pathlib import Path
 
 from jarvis import config as config_module
 from jarvis.profile import PROFILE_NAMES, Profile
 from jarvis.router import Router
 
+LOG_PATH = Path(__file__).resolve().parent.parent / "jarvis.log"
+
+
+def _setup_crash_log() -> None:
+    """Todo crash (Python o nativo) queda en jarvis.log, pase lo que pase
+    con stdout (que en segundo plano va en búfer y se pierde)."""
+    log = open(LOG_PATH, "a", encoding="utf-8", buffering=1)
+    faulthandler.enable(file=log)
+
+    def hook(exc_type, exc, tb):
+        log.write(f"\n--- {datetime.now():%Y-%m-%d %H:%M:%S} ---\n")
+        traceback.print_exception(exc_type, exc, tb, file=log)
+        traceback.print_exception(exc_type, exc, tb)
+
+    sys.excepthook = hook
+
 
 def main() -> None:
+    _setup_crash_log()
     parser = argparse.ArgumentParser(prog="jarvis")
     parser.add_argument("--debug", action="store_true", help="métricas por consola")
     parser.add_argument("--profile", choices=PROFILE_NAMES, help="fuerza el perfil")

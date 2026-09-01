@@ -5,6 +5,7 @@ __pycache__/
 # Modelos y datos locales (los descarga install.ps1)
 models/
 *.db
+*.log
 # Secretos y config local
 .env
 config.local.yaml
