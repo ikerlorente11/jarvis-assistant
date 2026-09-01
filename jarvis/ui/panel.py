@@ -61,11 +61,17 @@ QTextEdit#response {
     background: #232b3a; color: #e8ecf4; border: none;
     border-radius: 12px; padding: 8px; font-size: 13px;
 }
-QPushButton#row, QPushButton#rowAux {
+QPushButton#row, QPushButton#subrow, QPushButton#rowAux {
     background: transparent; color: #dbe3f0; border: none;
     border-radius: 10px; padding: 10px 12px; text-align: left; font-size: 14px;
 }
-QPushButton#row:hover { background: #2c374b; color: #ffffff; }
+QPushButton#row:hover, QPushButton#subrow:hover {
+    background: #2c374b; color: #ffffff;
+}
+QPushButton#subrow {
+    padding: 8px 12px 8px 38px; font-size: 13px; color: #c3cddd;
+    background: #202836; border-radius: 8px;
+}
 QPushButton#rowAux { padding: 10px 10px; text-align: center; }
 QPushButton#rowAux:hover { background: #2c374b; }
 QScrollArea { border: none; background: transparent; }
@@ -181,9 +187,9 @@ class Panel(QWidget):
                 widget.deleteLater()
 
     def _add_row(self, text: str, on_click, icon=None, tooltip: str = "",
-                 aux: tuple | None = None) -> None:
+                 aux: tuple | None = None, kind: str = "row") -> None:
         """Una fila de la lista; aux = (emoji, tooltip, callback) opcional."""
-        main = QPushButton(text, objectName="row")
+        main = QPushButton(text, objectName=kind)
         if icon is not None:
             main.setIcon(icon)
         if tooltip:
@@ -206,6 +212,7 @@ class Panel(QWidget):
 
     def _show_categories(self) -> None:
         self._clear_rows()
+        self._view = "categories"
         self.hint.setText("Grupos de acciones — o escribe directamente")
         for cat_id, cat in self.router.categories.items():
             self._add_row(
@@ -215,16 +222,18 @@ class Panel(QWidget):
 
     def _show_category(self, cat_id: str) -> None:
         self._clear_rows()
+        self._view = "category"
         cat = self.router.categories[cat_id]
-        self.hint.setText(f"{cat['icon']} {cat['label']}")
+        self.hint.setText(f"{cat['icon']} {cat['label']} — Esc para volver")
         self._add_row("←   Volver a los grupos", self._show_categories)
         for intent in self.router.intents:
             if intent.category != cat_id:
                 continue
             self._add_row(
-                "      " + self._button_text(intent),
+                self._button_text(intent),
                 lambda i=intent: self._on_intent(i),
                 tooltip=intent.description,
+                kind="subrow",
             )
 
     def _on_typing(self, text: str) -> None:
@@ -238,6 +247,7 @@ class Panel(QWidget):
 
     def _show_suggestions(self, query: str) -> None:
         self._clear_rows()
+        self._view = "suggestions"
         self.hint.setText("Sugerencias — Enter para enviar tal cual")
         scored = []
         for intent in self.router.intents:
@@ -266,7 +276,9 @@ class Panel(QWidget):
         self._clear_rows()
         if not items:
             return
-        self.hint.setText("Resultados — click para abrir")
+        self._view = "items"
+        self.hint.setText("Resultados — click para abrir, Esc para volver")
+        self._add_row("←   Volver", self._show_categories)
         for item in items[:MAX_ITEMS]:
             aux = None
             if item.kind in ("file", "folder"):
@@ -431,7 +443,15 @@ class Panel(QWidget):
         self.input.setFocus()
 
     def keyPressEvent(self, event) -> None:
+        # Esc retrocede un nivel; en la vista raíz, cierra el panel.
         if event.key() == Qt.Key_Escape:
-            self.hide()
+            if self.input.text():
+                self.input.clear()  # textChanged → vuelve a los grupos
+            elif self._view != "categories":
+                self.response.hide()
+                self.latency.hide()
+                self._show_categories()
+            else:
+                self.hide()
         else:
             super().keyPressEvent(event)
