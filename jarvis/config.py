@@ -25,3 +25,17 @@ def _merge(base: dict, extra: dict) -> None:
             _merge(base[key], value)
         else:
             base[key] = value
+
+
+def save_local(updates: dict) -> None:
+    """Persiste ajustes del usuario en config.local.yaml (gitignored),
+    que pisa a config.yaml al cargar. Ej.: volumen de la voz."""
+    path = ROOT / "config.local.yaml"
+    current: dict = {}
+    if path.exists():
+        current = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    _merge(current, updates)
+    path.write_text(
+        yaml.safe_dump(current, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )

@@ -28,6 +28,9 @@ def run(router: Router, debug: bool = False) -> int:
     panel.working.connect(
         lambda busy: ball.set_state("working" if busy else "idle")
     )
+    panel.speaking.connect(
+        lambda talking: ball.set_state("speaking" if talking else "idle")
+    )
 
     ball.show()
     return app.exec()

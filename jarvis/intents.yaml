@@ -139,6 +139,21 @@ categories:
         description: "Vuelve a la pista anterior del reproductor activo."
         patterns: ["anterior", "canción anterior", "vuelve a la canción"]
         skill: media.anterior
+      - id: voz_activar
+        label: "Activar la voz"
+        description: "El asistente lee las respuestas en voz alta (Piper)."
+        patterns: ["activa la voz", "habla", "lee las respuestas"]
+        skill: speech.activar
+      - id: voz_desactivar
+        label: "Desactivar la voz"
+        description: "El asistente deja de leer las respuestas."
+        patterns: ["desactiva la voz", "cállate", "deja de hablar", "no hables"]
+        skill: speech.desactivar
+      - id: voz_volumen
+        label: "Voz al… {nivel}"
+        description: "Volumen de la voz del asistente, 0-100 (no el del sistema)."
+        patterns: ["voz al {nivel}", "pon la voz al {nivel}", "volumen de la voz al {nivel}"]
+        skill: speech.volumen
       - id: captura
         label: "Captura de pantalla"
         description: "Captura todos los monitores y la guarda en Imágenes\\Capturas."

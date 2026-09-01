@@ -27,7 +27,14 @@ if (-not (Test-Path ".venv")) {
 }
 & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
-# 3. Modelos según el perfil detectado
+# 3. Voz de Piper (TTS) — corre en CPU en todos los perfiles
+if (-not (Test-Path "models\piper\es_ES-davefx-medium.onnx")) {
+    Write-Host "[..] Descargando voz de Piper..."
+    New-Item -ItemType Directory -Force "models\piper" | Out-Null
+    & .\.venv\Scripts\python.exe -m piper.download_voices es_ES-davefx-medium --data-dir "models\piper"
+}
+
+# 4. Modelos según el perfil detectado
 $profileOut = & .\.venv\Scripts\python.exe -m jarvis.profile
 Write-Host $profileOut
 if ($profileOut -match "LLM:\s+(qwen\S+)") {

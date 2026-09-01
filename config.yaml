@@ -4,9 +4,12 @@
 # Perfil de hardware: auto | full | gpu-lite | cpu | minimal (docs/02 §6)
 profile: auto
 
-# Salida hablada (Piper) — activable aunque se use solo la bolita
+# Salida hablada (Piper) — activable aunque se use solo la bolita.
+# El interruptor y el volumen del panel se guardan en config.local.yaml.
 tts:
   enabled: false
+  volume: 80          # volumen de la voz del asistente (0-100)
+  voice: es_ES-davefx-medium
 
 # Ciudad para el tiempo (Open-Meteo). "auto" = detectar por IP;
 # escribe un nombre de ciudad para fijarla.

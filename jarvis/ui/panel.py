@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QInputDialog,
@@ -17,11 +18,14 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QSlider,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+from jarvis import config as config_module
+from jarvis.audio.tts import TTS
 from jarvis.router import Result, Router
 
 WIDTH = 320
@@ -47,11 +51,20 @@ QLineEdit {
     border-radius: 8px; padding: 7px 10px;
 }
 QScrollArea { border: none; background: transparent; }
+QCheckBox { color: #e8ecf4; }
+QSlider::groove:horizontal {
+    height: 4px; background: #2a3342; border-radius: 2px;
+}
+QSlider::handle:horizontal {
+    width: 12px; margin: -5px 0; background: #8fa3c4; border-radius: 6px;
+}
+QSlider::sub-page:horizontal { background: #2f6fed; border-radius: 2px; }
 """
 
 
 class Panel(QWidget):
     working = Signal(bool)  # para que la bolita cambie de estado
+    speaking = Signal(bool)  # ídem, mientras el TTS habla
 
     def __init__(self, router: Router, debug: bool = False):
         super().__init__(
@@ -61,6 +74,9 @@ class Panel(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.router = router
         self.debug = debug
+        # emitir una señal Qt desde el hilo del TTS es seguro (conexión en cola)
+        self.tts = TTS(router.config, on_speaking=self.speaking.emit)
+        router.config["_tts"] = self.tts  # para las skills de voz
         self._build()
 
     # -- construcción --------------------------------------------------------
@@ -102,6 +118,21 @@ class Panel(QWidget):
         scroll.setWidget(menu)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         layout.addWidget(scroll, stretch=1)
+
+        # Voz del asistente: interruptor + volumen propio (no el del sistema).
+        voz_row = QHBoxLayout()
+        self.voz_check = QCheckBox("Voz")
+        self.voz_check.setChecked(self.tts.enabled)
+        self.voz_check.setToolTip("Leer las respuestas en voz alta (Piper)")
+        self.voz_check.toggled.connect(self._on_voz_toggled)
+        voz_row.addWidget(self.voz_check)
+        self.voz_slider = QSlider(Qt.Horizontal)
+        self.voz_slider.setRange(0, 100)
+        self.voz_slider.setValue(self.tts.volume)
+        self.voz_slider.setToolTip("Volumen de la voz del asistente")
+        self.voz_slider.valueChanged.connect(self._on_voz_volumen)
+        voz_row.addWidget(self.voz_slider, stretch=1)
+        layout.addLayout(voz_row)
 
         # Texto libre: mismo router que usará la voz.
         self.input = QLineEdit(placeholderText="Escribe una orden…")
@@ -165,9 +196,18 @@ class Panel(QWidget):
         self.working.emit(False)
         self.input.clear()
 
+    def _on_voz_toggled(self, checked: bool) -> None:
+        self.tts.set_enabled(checked)
+        config_module.save_local({"tts": {"enabled": checked}})
+
+    def _on_voz_volumen(self, value: int) -> None:
+        self.tts.set_volume(value)
+        config_module.save_local({"tts": {"volume": value}})
+
     def _show(self, result: Result) -> None:
         self.response.setPlainText(result.text)
         self.response.show()
+        self.tts.speak(result.text)
         if self.debug:
             self.latency.setText(
                 f"{result.elapsed_ms:.1f} ms · intent={result.intent_id}"
@@ -178,6 +218,10 @@ class Panel(QWidget):
 
     def show_near(self, ball_geometry) -> None:
         """Encima de la bolita, sin salirse de la pantalla."""
+        # reflejar cambios hechos por comando ("desactiva la voz")
+        self.voz_check.blockSignals(True)
+        self.voz_check.setChecked(self.tts.enabled)
+        self.voz_check.blockSignals(False)
         area = self.screen().availableGeometry()
         self.adjustSize()
         x = min(ball_geometry.x(), area.right() - self.width() - 8)
