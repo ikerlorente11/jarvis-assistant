@@ -99,6 +99,31 @@ def _afinar_orden(router, orden: str) -> str:
     return orden
 
 
+SECCIONES = {
+    "contacts": "contacto",
+    "apps": "alias de programa",
+    "sites": "alias web",
+    "folders": "carpeta",
+    "app_profiles": "modo",
+}
+
+
+def borrar(config: dict, nombre: str) -> str:
+    """Borra un alias/contacto/modo añadido por comando."""
+    nombre = nombre.strip().lower()
+    for articulo in ARTICULOS:
+        nombre = nombre.removeprefix(articulo)
+    nombre = nombre.strip()
+    for seccion, etiqueta in SECCIONES.items():
+        if nombre in (config.get(seccion) or {}):
+            if config_module.delete_local(seccion, nombre):
+                config[seccion].pop(nombre, None)
+                return f"Borrado el {etiqueta} «{nombre}»."
+            return (f"«{nombre}» viene del config.yaml base: "
+                    f"ese hay que quitarlo editando el fichero.")
+    return f"No encuentro «{nombre}» entre tus alias, contactos ni modos."
+
+
 def ver(config: dict) -> str:
     secciones = (
         ("Contactos", "contacts", "{k} → {v}"),

@@ -29,13 +29,33 @@ obligatoria de la nube.
 | [06-decisiones-riesgos.md](docs/06-decisiones-riesgos.md) | Decisiones abiertas y riesgos conocidos |
 | [07-despliegue.md](docs/07-despliegue.md) | Despliegue nativo (sin Docker), estructura del repo, install.ps1 |
 
-## Estado actual
+## Estado actual (sept. 2026)
 
-- Repo destino: **github.com/ikerlorente11/jarvis-assistant**
-- Interfaz inicial: **bolita flotante** (PySide6) con menús por categorías y
-  entrada de texto — permanente como ayuda de accesibilidad. La **voz se
-  aplaza a la Fase 5** (sin micrófono disponible ahora); se enchufará al mismo
-  router sin cambiar el motor.
+**Fases 0-4 completadas** + gran parte de la 6. Falta solo la **voz (fase 5)**,
+a la espera de micrófono — se enchufará al router existente sin tocar el motor.
+
+Lo que ya funciona:
+
+- **Panel lanzador** estilo Spotlight (bolita flotante opcional + atajo global
+  `Ctrl+Alt+J` + icono en bandeja), temas claro/oscuro/sistema, sugerencias en
+  vivo al escribir, resultados clicables con iconos, mando multimedia con
+  volumen del sistema en vivo.
+- **Fast path**: ~40 acciones (programas por aproximación, carpetas y archivos
+  vía Everything, tiempo con tarjetas estilo Google y geolocalización real de
+  Windows, volumen, capturas, timers, notas, noticias RSS, conversor…).
+- **Cerebro LLM** (Ollama + Qwen3 con function calling): el catálogo entero
+  como tools, streaming, contexto de conversación.
+- **Recordatorios persistentes** (APScheduler + SQLite): sobreviven a reinicios.
+- **Correo completo**: enlazado por Ajustes (credenciales en el Almacén de
+  Windows), leer no leídos / por remitente / último con resumen del LLM, y
+  envío con borrador + confirmación humana, HTML con estilos, adjuntos e
+  imágenes incrustadas.
+- **Personalización por comandos**: alias, contactos y modos multi-orden
+  ("crea el modo cine con netflix.com en la pantalla secundaria y baja el
+  volumen") con colocación de ventanas por monitor.
+- **TTS opcional** (Piper + Kokoro, 7 voces, normalización de dicción) con
+  precarga y volumen propio.
+- Arranque automático con Windows y `install.ps1` reproducible.
 
 ## Stack resumido (detalles en docs/02)
 

@@ -262,6 +262,17 @@ categories:
           - "nuevo modo {datos}"
           - "añade el modo {datos}"
         skill: customize.modo
+      - id: alias_borrar
+        label: "Borrar alias: {nombre}"
+        description: "Borra un alias, contacto o modo que hayas añadido por comando."
+        patterns:
+          - "borra el alias {nombre}"
+          - "elimina el alias {nombre}"
+          - "borra el contacto {nombre}"
+          - "elimina el contacto {nombre}"
+          - "borra el modo {nombre}"
+          - "elimina el modo {nombre}"
+        skill: customize.borrar
       - id: personalizacion_ver
         label: "Ver mi personalización"
         description: "Muestra tus contactos, alias, webs, carpetas y modos guardados."

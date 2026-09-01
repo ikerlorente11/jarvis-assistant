@@ -7,6 +7,11 @@ temporal — se queda siempre como ayuda de accesibilidad.
 
 Cada fase termina con algo usable; no se avanza sin validar la anterior.
 
+**Estado (01/09/2026): fases 0-4 ✅ completadas** (con mucho extra de UX:
+panel lanzador, temas, ajustes, atajo global, personalización por comandos,
+correo con HTML/adjuntos). De la fase 6 ya están el autoarranque y el icono
+de bandeja. **Queda la fase 5 (voz), a la espera de micrófono.**
+
 ## Fase 0 — Entorno y repo (½ día)
 
 - Repo git → GitHub **ikerlorente11/jarvis-assistant**.
