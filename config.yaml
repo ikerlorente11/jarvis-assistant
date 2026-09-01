@@ -4,6 +4,11 @@
 # Perfil de hardware: auto | full | gpu-lite | cpu | minimal (docs/02 §6)
 profile: auto
 
+# Interfaz: bolita flotante y atajo global para abrir el asistente
+ui:
+  ball: true            # false = sin bolita (abre con el atajo)
+  hotkey: ctrl+alt+j
+
 # Salida hablada (Piper) — activable aunque se use solo la bolita.
 # El interruptor y el volumen del panel se guardan en config.local.yaml.
 tts:

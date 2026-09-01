@@ -16,12 +16,13 @@ import threading
 import time
 
 from PySide6.QtCore import QFileInfo, Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QIntValidator, QTextCursor
+from PySide6.QtGui import QFont, QIntValidator, QKeySequence, QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileIconProvider,
     QHBoxLayout,
+    QKeySequenceEdit,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -102,6 +103,15 @@ QPushButton#step {
     text-align: center; padding: 0;
 }
 QPushButton#step:hover { background: #37445c; }
+QPushButton#action {
+    background: #2a3444; color: #dbe3f0; border: none; border-radius: 8px;
+    padding: 7px 14px; font-size: 12px; text-align: center;
+}
+QPushButton#action:hover { background: #3f7cff; color: #ffffff; }
+QKeySequenceEdit {
+    background: #232b3a; color: #dbe3f0; border: 1px solid #313c50;
+    border-radius: 8px; padding: 4px 8px; font-size: 12px;
+}
 QLineEdit#vozPct {
     background: #232b3a; color: #dbe3f0; border: 1px solid #313c50;
     border-radius: 8px; padding: 2px; font-size: 12px;
@@ -137,6 +147,8 @@ class Panel(QWidget):
     token = Signal(str)  # streaming del LLM (emitida desde su hilo)
     llm_done = Signal(str, float)  # respuesta completa + latencia ms
     mail_result = Signal(str)  # resultado de enlazar/desenlazar el correo
+    ball_visible = Signal(bool)  # mostrar/ocultar la bolita desde Ajustes
+    hotkey_changed = Signal(str)  # nueva combinación de teclas global
 
     def __init__(self, router: Router, debug: bool = False, brain=None):
         super().__init__(
@@ -174,16 +186,11 @@ class Panel(QWidget):
         layout.setContentsMargins(16, 16, 16, 12)
         layout.setSpacing(10)
 
-        top = QHBoxLayout()
-        top.setSpacing(8)
         self.input = QLineEdit(objectName="search")
         self.input.setPlaceholderText("🔍  Pídeme algo o elige una acción…")
         self.input.returnPressed.connect(self._on_text)
         self.input.textChanged.connect(self._on_typing)
-        top.addWidget(self.input, stretch=1)
-        gear = self._glyph_button(chr(0xE713), "Ajustes", self._show_settings)
-        top.addWidget(gear)
-        layout.addLayout(top)
+        layout.addWidget(self.input)
 
         self.hint = QLabel("", objectName="hint")
         layout.addWidget(self.hint)
@@ -228,6 +235,12 @@ class Panel(QWidget):
         self.latency = QLabel("", objectName="latency")
         self.latency.hide()
         layout.addWidget(self.latency)
+
+        # pie: engranaje de Ajustes abajo a la derecha
+        pie = QHBoxLayout()
+        pie.addStretch(1)
+        pie.addWidget(self._glyph_button(chr(0xE713), "Ajustes", self._show_settings))
+        layout.addLayout(pie)
 
         self.voz_pct = None  # se crean al abrir ⚙ Ajustes
         self.setFixedSize(WIDTH, HEIGHT)
@@ -478,16 +491,15 @@ class Panel(QWidget):
         self.hint.setText("⚙ Ajustes — Esc para volver")
         self._add_row("←   Volver", self._show_categories)
 
-        # ---- Voz ----
+        # ---- Voz (todo en una línea, como el pie de antes) ----
         voz = self._settings_card("🔊  Voz del asistente")
-        fila1 = QHBoxLayout()
-        self.voz_check = QCheckBox("Leer las respuestas en voz alta")
+        fila = QHBoxLayout()
+        fila.setSpacing(8)
+        self.voz_check = QCheckBox("Voz")
+        self.voz_check.setToolTip("Leer las respuestas en voz alta")
         self.voz_check.setChecked(self.tts.enabled)
         self.voz_check.toggled.connect(self._on_voz_toggled)
-        fila1.addWidget(self.voz_check, stretch=1)
-        voz.addLayout(fila1)
-        fila2 = QHBoxLayout()
-        fila2.setSpacing(8)
+        fila.addWidget(self.voz_check)
         self.voz_combo = QComboBox()
         self.voz_combo.setToolTip("Al cambiar de voz, la oyes")
         for voice in TTS.installed_voices():
@@ -496,21 +508,42 @@ class Panel(QWidget):
         if index >= 0:
             self.voz_combo.setCurrentIndex(index)
         self.voz_combo.currentIndexChanged.connect(self._on_voz_cambiada)
-        fila2.addWidget(self.voz_combo, stretch=1)
+        fila.addWidget(self.voz_combo, stretch=1)
         menos = QPushButton("−", objectName="step")
         menos.clicked.connect(lambda _=False: self._voz_ajustar(-10))
-        fila2.addWidget(menos)
+        fila.addWidget(menos)
         self.voz_pct = QLineEdit(str(self.tts.volume), objectName="vozPct")
         self.voz_pct.setValidator(QIntValidator(0, 100, self))
         self.voz_pct.setFixedWidth(38)
         self.voz_pct.setAlignment(Qt.AlignCenter)
         self.voz_pct.editingFinished.connect(self._on_voz_editado)
-        fila2.addWidget(self.voz_pct)
-        fila2.addWidget(QLabel("%"))
+        fila.addWidget(self.voz_pct)
+        fila.addWidget(QLabel("%"))
         mas = QPushButton("+", objectName="step")
         mas.clicked.connect(lambda _=False: self._voz_ajustar(+10))
-        fila2.addWidget(mas)
-        voz.addLayout(fila2)
+        fila.addWidget(mas)
+        voz.addLayout(fila)
+
+        # ---- Interfaz ----
+        interfaz = self._settings_card("🖥️  Interfaz")
+        ui_config = self.router.config.get("ui", {}) or {}
+        self.ball_check = QCheckBox("Mostrar la bolita flotante")
+        self.ball_check.setToolTip(
+            "Sin bolita, el asistente se abre con el atajo de teclado (o por voz)"
+        )
+        self.ball_check.setChecked(bool(ui_config.get("ball", True)))
+        self.ball_check.toggled.connect(self._on_ball_toggled)
+        interfaz.addWidget(self.ball_check)
+        atajo_fila = QHBoxLayout()
+        atajo_fila.setSpacing(8)
+        atajo_fila.addWidget(QLabel("Abrir con:"))
+        self.hotkey_edit = QKeySequenceEdit(
+            QKeySequence(str(ui_config.get("hotkey", "ctrl+alt+j")))
+        )
+        self.hotkey_edit.setToolTip("Pulsa la combinación que quieras usar")
+        self.hotkey_edit.editingFinished.connect(self._on_hotkey)
+        atajo_fila.addWidget(self.hotkey_edit, stretch=1)
+        interfaz.addLayout(atajo_fila)
 
         # ---- Arranque ----
         arranque = self._settings_card("🚀  Arranque")
@@ -523,12 +556,23 @@ class Panel(QWidget):
         correo = self._settings_card("📧  Correo")
         cuenta = mail.cuenta_enlazada(self.router.config)
         self._mail_status = QLabel(
-            f"Enlazado: {cuenta}" if cuenta else "Sin enlazar — usa una "
-            "contraseña de aplicación (Gmail/Outlook)."
+            f"Enlazado: {cuenta}" if cuenta else "Sin enlazar."
         )
         self._mail_status.setWordWrap(True)
         self._mail_status.setStyleSheet("color: #aeb9cc; font-size: 12px;")
         correo.addWidget(self._mail_status)
+        ayuda = QLabel(
+            "Necesitas una <b>contraseña de aplicación</b>, no la normal: "
+            "activa la verificación en 2 pasos y créala aquí — "
+            "<a href='https://myaccount.google.com/apppasswords' "
+            "style='color:#6fa8ff'>Gmail</a> · "
+            "<a href='https://account.live.com/proofs/AppPassword' "
+            "style='color:#6fa8ff'>Outlook</a>."
+        )
+        ayuda.setWordWrap(True)
+        ayuda.setOpenExternalLinks(True)
+        ayuda.setStyleSheet("color: #8fa3c4; font-size: 11px;")
+        correo.addWidget(ayuda)
         self._mail_addr = QLineEdit(objectName="slotInput")
         self._mail_addr.setPlaceholderText("tucorreo@gmail.com")
         correo.addWidget(self._mail_addr)
@@ -537,13 +581,29 @@ class Panel(QWidget):
         self._mail_pass.setEchoMode(QLineEdit.Password)
         correo.addWidget(self._mail_pass)
         botones = QHBoxLayout()
-        enlazar = QPushButton("Enlazar y probar", objectName="subrow")
-        enlazar.clicked.connect(self._on_mail_enlazar)
-        botones.addWidget(enlazar)
-        quitar = QPushButton("Desenlazar", objectName="subrow")
+        botones.setSpacing(8)
+        botones.addStretch(1)
+        quitar = QPushButton("Desenlazar", objectName="action")
         quitar.clicked.connect(self._on_mail_desenlazar)
         botones.addWidget(quitar)
+        enlazar = QPushButton("Enlazar y probar", objectName="action")
+        enlazar.clicked.connect(self._on_mail_enlazar)
+        botones.addWidget(enlazar)
         correo.addLayout(botones)
+
+    def _on_ball_toggled(self, checked: bool) -> None:
+        config_module.save_local({"ui": {"ball": checked}})
+        self.router.config.setdefault("ui", {})["ball"] = checked
+        self.ball_visible.emit(checked)
+
+    def _on_hotkey(self) -> None:
+        combo = self.hotkey_edit.keySequence().toString().lower()
+        if not combo:
+            return
+        config_module.save_local({"ui": {"hotkey": combo}})
+        self.router.config.setdefault("ui", {})["hotkey"] = combo
+        self.hotkey_changed.emit(combo)
+        self.hint.setText(f"⚙ Ajustes — atajo: {combo}")
 
     def _on_autostart(self, checked: bool) -> None:
         from jarvis import autostart

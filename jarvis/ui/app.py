@@ -12,6 +12,8 @@ from jarvis.ui.panel import Panel
 
 
 def run(router: Router, brain=None, debug: bool = False) -> int:
+    from jarvis.ui.hotkey import GlobalHotkey
+
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)  # ocultar el panel no cierra el programa
 
@@ -31,6 +33,13 @@ def run(router: Router, brain=None, debug: bool = False) -> int:
     panel.speaking.connect(
         lambda talking: ball.set_state("speaking" if talking else "idle")
     )
+    panel.ball_visible.connect(ball.setVisible)
 
-    ball.show()
+    ui_config = router.config.get("ui", {}) or {}
+    hotkey = GlobalHotkey(app, toggle_panel)
+    hotkey.register(str(ui_config.get("hotkey", "ctrl+alt+j")))
+    panel.hotkey_changed.connect(hotkey.register)
+
+    if ui_config.get("ball", True):
+        ball.show()
     return app.exec()
