@@ -77,9 +77,18 @@ categories:
         params: { app: navegador }
       - id: abrir_web
         label: "Abrir web: {url}"
-        description: "Abre una dirección web (ej.: youtube.com) o un alias de `sites` en config.yaml."
+        description: "Abre una dirección o alias; admite «… en la pantalla principal/secundaria» y «… en una ventana nueva». Si no parece una dirección, lo busca."
         patterns: ["abre la web {url}", "abre la página {url}", "ve a {url}", "entra en {url}"]
         skill: web.abrir
+      - id: buscar_web
+        label: "Buscar en internet: {consulta}"
+        description: "Busca en el navegador; admite «… en la pantalla principal/secundaria» y «… en una ventana nueva»."
+        patterns:
+          - "busca en internet {consulta}"
+          - "busca en el navegador {consulta}"
+          - "busca en google {consulta}"
+          - "búscame {consulta}"
+        skill: web.buscar
       - id: modo
         label: "Activar modo: {perfil}"
         description: "Abre de golpe los programas de un perfil (definidos en `app_profiles` de config.yaml)."
