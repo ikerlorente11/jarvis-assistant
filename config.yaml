@@ -10,3 +10,15 @@ tts:
 
 # Ciudad por defecto para el tiempo (Open-Meteo)
 city: Bilbao
+
+# Alias de programas: lo que dices → comando/ejecutable
+apps:
+  navegador: chrome
+  explorador: explorer
+  notas: notepad
+  calculadora: calc
+
+# Alias de carpetas: lo que dices → ruta (las estándar ya se conocen:
+# descargas, documentos, escritorio, imágenes, música, vídeos)
+folders:
+  proyectos: ~/Documents/Develop

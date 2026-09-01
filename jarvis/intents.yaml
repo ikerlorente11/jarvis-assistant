@@ -1,0 +1,68 @@
+# Catálogo de intents (docs/01): alimenta el router fast path Y los menús
+# de la bolita. Skill nueva = entrada aquí + módulo en jarvis/skills/.
+#
+# Formato de cada intent:
+#   id:       único, estable (lo usa la UI para dispatch directo)
+#   label:    texto del menú; con {slot} se pide el valor al usuario
+#   patterns: frases para el matching (regex si llevan {slot}, fuzzy si no)
+#   skill:    modulo.funcion dentro de jarvis/skills/
+#   params:   argumentos fijos opcionales; el {slot} llega como argumento extra
+
+categories:
+  informacion:
+    label: Información
+    intents:
+      - id: hora
+        label: "¿Qué hora es?"
+        patterns:
+          - "qué hora es"
+          - "dime la hora"
+          - "la hora"
+        skill: datetime_info.hora
+      - id: fecha
+        label: "¿Qué día es hoy?"
+        patterns:
+          - "qué día es hoy"
+          - "qué fecha es"
+          - "dime la fecha"
+        skill: datetime_info.fecha
+
+  programas:
+    label: Programas
+    intents:
+      - id: abrir_programa
+        label: "Abrir programa: {app}"
+        patterns:
+          - "abre {app}"
+          - "abrir {app}"
+          - "ábreme {app}"
+          - "abre el {app}"
+          - "abre la {app}"
+        skill: apps.abrir
+      - id: abrir_navegador
+        label: "Abrir el navegador"
+        patterns:
+          - "abre el navegador"
+          - "abrir navegador"
+        skill: apps.abrir
+        params:
+          app: navegador
+
+  archivos:
+    label: Archivos
+    intents:
+      - id: abrir_carpeta
+        label: "Abrir carpeta: {carpeta}"
+        patterns:
+          - "abre la carpeta {carpeta}"
+          - "abrir carpeta {carpeta}"
+          - "abre la carpeta de {carpeta}"
+        skill: folders.abrir
+      - id: abrir_descargas
+        label: "Abrir Descargas"
+        patterns:
+          - "abre descargas"
+          - "abre las descargas"
+        skill: folders.abrir
+        params:
+          carpeta: descargas
