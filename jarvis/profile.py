@@ -29,16 +29,17 @@ PROFILE_SETTINGS = {
         "llm_model": "qwen3:8b",
         "llm_enabled": True,
     },
+    # 4B en variante instruct-2507: no "piensa" (latencia) y llama mejor a tools
     "gpu-lite": {
         "stt_model": "small",
         "stt_device": "cuda",
-        "llm_model": "qwen3:4b",
+        "llm_model": "qwen3:4b-instruct-2507-q4_K_M",
         "llm_enabled": True,
     },
     "cpu": {
         "stt_model": "small",
         "stt_device": "cpu",
-        "llm_model": "qwen3:4b",
+        "llm_model": "qwen3:4b-instruct-2507-q4_K_M",
         "llm_enabled": True,
     },
     "minimal": {

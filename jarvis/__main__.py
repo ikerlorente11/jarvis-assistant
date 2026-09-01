@@ -44,9 +44,13 @@ def main() -> None:
     config = config_module.load()
     router = Router(config)
 
+    from jarvis.brain import Brain
+
+    brain = Brain(config, router, profile)
+
     from jarvis.ui.app import run  # import tardío: PySide6 pesa
 
-    raise SystemExit(run(router, debug=args.debug))
+    raise SystemExit(run(router, brain=brain, debug=args.debug))
 
 
 if __name__ == "__main__":

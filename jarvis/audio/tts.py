@@ -28,9 +28,12 @@ class TTS:
         self.voice_name = tts_config.get("voice", DEFAULT_VOICE)
         self._on_speaking = on_speaking or (lambda speaking: None)
         self._voice = None
+        self._load_lock = threading.Lock()
         self._queue: queue.Queue[str] = queue.Queue()
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
+        if self.enabled:
+            self.preload()  # que la primera respuesta no pague la carga
 
     # -- API -----------------------------------------------------------------
 
@@ -46,9 +49,15 @@ class TTS:
         winsound.PlaySound(None, winsound.SND_PURGE)  # corta lo que suene
         self._queue.put(text)
 
+    def preload(self) -> None:
+        """Carga la voz en un hilo aparte sin bloquear el arranque."""
+        threading.Thread(target=self._load_voice, daemon=True).start()
+
     def set_enabled(self, enabled: bool) -> None:
         self.enabled = enabled
-        if not enabled:
+        if enabled:
+            self.preload()
+        else:
             winsound.PlaySound(None, winsound.SND_PURGE)
 
     def set_volume(self, volume: int) -> None:
@@ -85,8 +94,9 @@ class TTS:
         winsound.PlaySound(buffer.getvalue(), winsound.SND_MEMORY)
 
     def _load_voice(self):
-        if self._voice is None and self.available:
-            from piper import PiperVoice
+        with self._load_lock:
+            if self._voice is None and self.available:
+                from piper import PiperVoice
 
-            self._voice = PiperVoice.load(MODELS_DIR / f"{self.voice_name}.onnx")
-        return self._voice
+                self._voice = PiperVoice.load(MODELS_DIR / f"{self.voice_name}.onnx")
+            return self._voice

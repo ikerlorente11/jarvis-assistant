@@ -8,7 +8,11 @@ la voz).
 
 from __future__ import annotations
 
+import threading
+import time
+
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -65,19 +69,25 @@ QSlider::sub-page:horizontal { background: #2f6fed; border-radius: 2px; }
 class Panel(QWidget):
     working = Signal(bool)  # para que la bolita cambie de estado
     speaking = Signal(bool)  # ídem, mientras el TTS habla
+    token = Signal(str)  # streaming del LLM (emitida desde su hilo)
+    llm_done = Signal(str, float)  # respuesta completa + latencia ms
 
-    def __init__(self, router: Router, debug: bool = False):
+    def __init__(self, router: Router, debug: bool = False, brain=None):
         super().__init__(
             None,
             Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool,
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.router = router
+        self.brain = brain
         self.debug = debug
+        self._busy = False  # hay una petición al LLM en curso
         # emitir una señal Qt desde el hilo del TTS es seguro (conexión en cola)
         self.tts = TTS(router.config, on_speaking=self.speaking.emit)
         router.config["_tts"] = self.tts  # para las skills de voz
         self._build()
+        self.token.connect(self._on_token)
+        self.llm_done.connect(self._on_llm_done)
 
     # -- construcción --------------------------------------------------------
 
@@ -188,13 +198,54 @@ class Panel(QWidget):
 
     def _on_text(self) -> None:
         text = self.input.text().strip()
-        if not text:
+        if not text or self._busy:
             return
+        self.input.clear()
         self.working.emit(True)
         result = self.router.handle(text)
-        self._show(result)
+        if result.matched or self.brain is None or not self.brain.enabled:
+            self._show(result)
+            self.working.emit(False)
+        else:
+            self._ask_llm(text)  # slow path; working se apaga al terminar
+
+    # -- slow path (LLM) -----------------------------------------------------
+
+    def _ask_llm(self, text: str) -> None:
+        problema = self.brain.available()
+        if problema:
+            self._show(Result(problema, False, None, 0.0))
+            self.working.emit(False)
+            return
+        self._busy = True
+        self._t0 = time.perf_counter()
+        self.response.setPlainText("")
+        self.response.show()
+        threading.Thread(
+            target=self._llm_worker, args=(text,), daemon=True
+        ).start()
+
+    def _llm_worker(self, text: str) -> None:
+        try:
+            full = self.brain.chat(text, on_token=self.token.emit)
+        except Exception as exc:
+            full = f"Error del LLM: {exc.__class__.__name__}."
+            self.token.emit(full)
+        self.llm_done.emit(full, (time.perf_counter() - self._t0) * 1000)
+
+    def _on_token(self, token: str) -> None:
+        cursor = self.response.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        cursor.insertText(token)
+        self.response.ensureCursorVisible()
+
+    def _on_llm_done(self, full: str, elapsed_ms: float) -> None:
+        self._busy = False
         self.working.emit(False)
-        self.input.clear()
+        if self.debug:
+            self.latency.setText(f"{elapsed_ms:.0f} ms · slow path (LLM)")
+            self.latency.show()
+        self.tts.speak(full)
 
     def _on_voz_toggled(self, checked: bool) -> None:
         self.tts.set_enabled(checked)

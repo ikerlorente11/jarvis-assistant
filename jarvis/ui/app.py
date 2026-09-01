@@ -11,12 +11,12 @@ from jarvis.ui.ball import Ball
 from jarvis.ui.panel import Panel
 
 
-def run(router: Router, debug: bool = False) -> int:
+def run(router: Router, brain=None, debug: bool = False) -> int:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)  # ocultar el panel no cierra el programa
 
     ball = Ball()
-    panel = Panel(router, debug=debug)
+    panel = Panel(router, debug=debug, brain=brain)
 
     def toggle_panel() -> None:
         if panel.isVisible():
