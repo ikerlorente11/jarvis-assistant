@@ -40,10 +40,19 @@ class TTS:
 
     def speak(self, text: str) -> None:
         """Encola el texto (si está activado); descarta lo pendiente."""
+        if not self.enabled:
+            return
+        self._enqueue(text)
+
+    def preview(self, text: str) -> None:
+        """Habla aunque la voz esté desactivada (probar voces del selector)."""
+        self._enqueue(text)
+
+    def _enqueue(self, text: str) -> None:
         from jarvis.audio.speech_text import normalizar
 
         text = normalizar(text, self.replacements)
-        if not self.enabled or not text:
+        if not text:
             return
         while not self._queue.empty():
             try:
@@ -66,6 +75,22 @@ class TTS:
 
     def set_volume(self, volume: int) -> None:
         self.volume = max(0, min(100, int(volume)))
+
+    def set_voice(self, voice_name: str) -> None:
+        if voice_name == self.voice_name:
+            return
+        winsound.PlaySound(None, winsound.SND_PURGE)
+        with self._load_lock:
+            self.voice_name = voice_name
+            self._voice = None
+        self.preload()
+
+    @staticmethod
+    def installed_voices() -> list[str]:
+        """Voces disponibles en models/piper (nombres de fichero sin .onnx)."""
+        if not MODELS_DIR.is_dir():
+            return []
+        return sorted(p.stem for p in MODELS_DIR.glob("*.onnx"))
 
     @property
     def available(self) -> bool:

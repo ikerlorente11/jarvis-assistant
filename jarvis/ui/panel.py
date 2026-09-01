@@ -19,9 +19,9 @@ from PySide6.QtCore import QFileInfo, Qt, Signal
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFileIconProvider,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -79,6 +79,15 @@ QScrollBar:vertical { background: transparent; width: 8px; }
 QScrollBar::handle:vertical { background: #313c50; border-radius: 4px; min-height: 24px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QCheckBox { color: #aeb9cc; font-size: 12px; }
+QComboBox {
+    background: #232b3a; color: #dbe3f0; border: 1px solid #313c50;
+    border-radius: 8px; padding: 4px 10px; font-size: 12px;
+}
+QComboBox::drop-down { border: none; width: 18px; }
+QComboBox QAbstractItemView {
+    background: #232b3a; color: #dbe3f0; border: 1px solid #313c50;
+    selection-background-color: #2c374b;
+}
 QSlider::groove:horizontal { height: 4px; background: #2a3342; border-radius: 2px; }
 QSlider::handle:horizontal {
     width: 12px; margin: -5px 0; background: #8fa3c4; border-radius: 6px;
@@ -106,6 +115,7 @@ class Panel(QWidget):
         self.debug = debug
         self._busy = False
         self._placeholder = False  # la respuesta muestra el "⏳…" inicial
+        self._pending_intent = None  # intent esperando su valor en la barra
         self._icons = QFileIconProvider()
         # emitir una señal Qt desde el hilo del TTS es seguro (conexión en cola)
         self.tts = TTS(router.config, on_speaking=self.speaking.emit)
@@ -160,13 +170,22 @@ class Panel(QWidget):
         self.latency.hide()
         layout.addWidget(self.latency)
 
-        # Voz del asistente: interruptor + volumen propio (no el del sistema).
+        # Voz del asistente: interruptor + selector de voz + volumen propio.
         voz_row = QHBoxLayout()
-        self.voz_check = QCheckBox("🔊 Voz")
+        self.voz_check = QCheckBox("🔊")
         self.voz_check.setChecked(self.tts.enabled)
         self.voz_check.setToolTip("Leer las respuestas en voz alta")
         self.voz_check.toggled.connect(self._on_voz_toggled)
         voz_row.addWidget(self.voz_check)
+        self.voz_combo = QComboBox()
+        self.voz_combo.setToolTip("Voz del asistente — al cambiarla la oyes")
+        for voice in TTS.installed_voices():
+            self.voz_combo.addItem(self._voice_label(voice), voice)
+        index = self.voz_combo.findData(self.tts.voice_name)
+        if index >= 0:
+            self.voz_combo.setCurrentIndex(index)
+        self.voz_combo.currentIndexChanged.connect(self._on_voz_cambiada)
+        voz_row.addWidget(self.voz_combo)
         self.voz_slider = QSlider(Qt.Horizontal)
         self.voz_slider.setRange(0, 100)
         self.voz_slider.setValue(self.tts.volume)
@@ -237,7 +256,7 @@ class Panel(QWidget):
             )
 
     def _on_typing(self, text: str) -> None:
-        if self._busy:
+        if self._busy or self._pending_intent is not None:
             return
         text = text.strip()
         if not text:
@@ -305,22 +324,52 @@ class Panel(QWidget):
     def _on_intent(self, intent) -> None:
         if self._busy:
             return
-        slot_value = None
         if intent.slot:
-            prompt = intent.description or f"¿Qué {intent.slot}?"
-            if intent.options_from:
-                # Las opciones salen de config.yaml (p. ej. app_profiles);
-                # editable: también se puede escribir otra cosa.
-                opciones = list(
-                    self.router.config.get(intent.options_from, {}).keys()
+            self._enter_slot_mode(intent)
+            return
+        self._run_intent(intent, None)
+
+    def _enter_slot_mode(self, intent) -> None:
+        """El valor se pide en la propia barra, sin diálogos aparte."""
+        self._pending_intent = intent
+        self._view = "slot"
+        self.input.blockSignals(True)
+        self.input.clear()
+        self.input.blockSignals(False)
+        prompt = intent.description or f"¿Qué {intent.slot}?"
+        self.input.setPlaceholderText(f"✏️  {prompt}")
+        self.hint.setText(f"{self._button_text(intent)} — escribe y pulsa Enter, Esc cancela")
+        self._clear_rows()
+        if intent.options_from:
+            # Las opciones salen de config.yaml (p. ej. app_profiles);
+            # también se puede escribir otra cosa a mano.
+            for opcion in self.router.config.get(intent.options_from, {}):
+                self._add_row(
+                    f"▸   {opcion}",
+                    lambda o=opcion: self._submit_slot(o),
+                    kind="subrow",
                 )
-                slot_value, ok = QInputDialog.getItem(
-                    self, "JARVIS", prompt, opciones, 0, True
-                )
-            else:
-                slot_value, ok = QInputDialog.getText(self, "JARVIS", prompt)
-            if not ok or not slot_value.strip():
-                return
+        self._add_row("←   Cancelar", self._cancel_slot)
+        self.input.setFocus()
+
+    def _submit_slot(self, value: str) -> None:
+        intent = self._pending_intent
+        self._exit_slot_mode()
+        if intent is not None and value.strip():
+            self._run_intent(intent, value.strip())
+
+    def _cancel_slot(self) -> None:
+        self._exit_slot_mode()
+        self._show_categories()
+
+    def _exit_slot_mode(self) -> None:
+        self._pending_intent = None
+        self.input.blockSignals(True)
+        self.input.clear()
+        self.input.blockSignals(False)
+        self.input.setPlaceholderText("🔍  Pídeme algo o elige una acción…")
+
+    def _run_intent(self, intent, slot_value: str | None) -> None:
         self._start_busy(self._button_text(intent))
         threading.Thread(
             target=lambda: self.fast_done.emit(
@@ -331,7 +380,13 @@ class Panel(QWidget):
 
     def _on_text(self) -> None:
         text = self.input.text().strip()
-        if not text or self._busy:
+        if self._busy:
+            return
+        if self._pending_intent is not None:
+            if text:
+                self._submit_slot(text)
+            return
+        if not text:
             return
         self.input.clear()
         self._start_busy(text)
@@ -417,6 +472,24 @@ class Panel(QWidget):
 
     # -- voz -----------------------------------------------------------------
 
+    @staticmethod
+    def _voice_label(voice: str) -> str:
+        # "es_ES-davefx-medium" → "Davefx (es-ES)"
+        try:
+            region, nombre, _calidad = voice.split("-", 2)
+            return f"{nombre.capitalize()} ({region.replace('_', '-')})"
+        except ValueError:
+            return voice
+
+    def _on_voz_cambiada(self, index: int) -> None:
+        voice = self.voz_combo.itemData(index)
+        if not voice or voice == self.tts.voice_name:
+            return
+        self.tts.set_voice(voice)
+        config_module.save_local({"tts": {"voice": voice}})
+        # se oye al momento aunque la voz esté desactivada: así se elige
+        self.tts.preview("Hola, así sueno yo. ¿Qué te parece?")
+
     def _on_voz_toggled(self, checked: bool) -> None:
         self.tts.set_enabled(checked)
         config_module.save_local({"tts": {"enabled": checked}})
@@ -445,7 +518,9 @@ class Panel(QWidget):
     def keyPressEvent(self, event) -> None:
         # Esc retrocede un nivel; en la vista raíz, cierra el panel.
         if event.key() == Qt.Key_Escape:
-            if self.input.text():
+            if self._pending_intent is not None:
+                self._cancel_slot()
+            elif self.input.text():
                 self.input.clear()  # textChanged → vuelve a los grupos
             elif self._view != "categories":
                 self.response.hide()
