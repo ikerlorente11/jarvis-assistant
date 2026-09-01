@@ -1,23 +1,40 @@
-"""TTS con Piper: lee las respuestas en voz alta (opcional, config tts.enabled).
+"""TTS: lee las respuestas en voz alta (opcional, config tts.enabled).
 
-- La voz se carga una sola vez (perezosamente) y se queda en memoria.
-- Cola de un elemento: hablar algo nuevo descarta lo pendiente y corta lo
-  que esté sonando — la última respuesta es la que importa.
-- Sin dependencia de Qt: la UI (y en fase 5 la voz) le pasan un callback
-  opcional para reflejar el estado "hablando".
+Dos motores:
+- Piper (rápido, varias voces es_ES). Se sintetiza frase a frase y se
+  insertan pausas reales entre frases: Piper no respeta bien la puntuación.
+- Kokoro (más calidad; voces es: Dora ♀, Alex ♂, Santa ♂), nombres
+  "kokoro:dora" etc. Modelo en models/kokoro (lo descarga install.ps1).
+
+Comportamiento común: el motor se carga una vez (precarga al arrancar o al
+activar), cola de un elemento (hablar algo nuevo corta lo anterior) y
+volumen propio 0-100. Sin dependencia de Qt.
 """
 
 from __future__ import annotations
 
 import io
 import queue
+import re
 import threading
 import wave
 import winsound
 from pathlib import Path
 
-MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "models" / "piper"
+MODELS = Path(__file__).resolve().parent.parent.parent / "models"
+PIPER_DIR = MODELS / "piper"
+KOKORO_DIR = MODELS / "kokoro"
 DEFAULT_VOICE = "es_ES-davefx-medium"
+
+KOKORO_VOICES = {  # nombre visible → id interno del modelo
+    "kokoro:dora": "ef_dora",
+    "kokoro:alex": "em_alex",
+    "kokoro:santa": "em_santa",
+}
+KOKORO_FILES = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
+
+PAUSA_S = 0.28  # silencio entre frases (Piper)
+FRASES = re.compile(r"(?<=[.!?;:])\s+")
 
 
 class TTS:
@@ -28,7 +45,8 @@ class TTS:
         self.voice_name = tts_config.get("voice", DEFAULT_VOICE)
         self.replacements = tts_config.get("replacements", {}) or {}
         self._on_speaking = on_speaking or (lambda speaking: None)
-        self._voice = None
+        self._piper = None
+        self._kokoro = None
         self._load_lock = threading.Lock()
         self._queue: queue.Queue[str] = queue.Queue()
         self._worker = threading.Thread(target=self._run, daemon=True)
@@ -48,23 +66,9 @@ class TTS:
         """Habla aunque la voz esté desactivada (probar voces del selector)."""
         self._enqueue(text)
 
-    def _enqueue(self, text: str) -> None:
-        from jarvis.audio.speech_text import normalizar
-
-        text = normalizar(text, self.replacements)
-        if not text:
-            return
-        while not self._queue.empty():
-            try:
-                self._queue.get_nowait()
-            except queue.Empty:
-                break
-        winsound.PlaySound(None, winsound.SND_PURGE)  # corta lo que suene
-        self._queue.put(text)
-
     def preload(self) -> None:
-        """Carga la voz en un hilo aparte sin bloquear el arranque."""
-        threading.Thread(target=self._load_voice, daemon=True).start()
+        """Carga el motor en un hilo aparte sin bloquear el arranque."""
+        threading.Thread(target=self._load_engine, daemon=True).start()
 
     def set_enabled(self, enabled: bool) -> None:
         self.enabled = enabled
@@ -82,21 +86,39 @@ class TTS:
         winsound.PlaySound(None, winsound.SND_PURGE)
         with self._load_lock:
             self.voice_name = voice_name
-            self._voice = None
+            self._piper = None  # el kokoro cargado se reutiliza entre sus voces
         self.preload()
-
-    @staticmethod
-    def installed_voices() -> list[str]:
-        """Voces disponibles en models/piper (nombres de fichero sin .onnx)."""
-        if not MODELS_DIR.is_dir():
-            return []
-        return sorted(p.stem for p in MODELS_DIR.glob("*.onnx"))
 
     @property
     def available(self) -> bool:
-        return (MODELS_DIR / f"{self.voice_name}.onnx").exists()
+        if self.voice_name in KOKORO_VOICES:
+            return all((KOKORO_DIR / f).exists() for f in KOKORO_FILES)
+        return (PIPER_DIR / f"{self.voice_name}.onnx").exists()
+
+    @staticmethod
+    def installed_voices() -> list[str]:
+        voices = []
+        if PIPER_DIR.is_dir():
+            voices += sorted(p.stem for p in PIPER_DIR.glob("*.onnx"))
+        if all((KOKORO_DIR / f).exists() for f in KOKORO_FILES):
+            voices += list(KOKORO_VOICES)
+        return voices
 
     # -- worker --------------------------------------------------------------
+
+    def _enqueue(self, text: str) -> None:
+        from jarvis.audio.speech_text import normalizar
+
+        text = normalizar(text, self.replacements)
+        if not text:
+            return
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+        winsound.PlaySound(None, winsound.SND_PURGE)  # corta lo que suene
+        self._queue.put(text)
 
     def _run(self) -> None:
         while True:
@@ -110,22 +132,81 @@ class TTS:
                 self._on_speaking(False)
 
     def _speak(self, text: str) -> None:
-        voice = self._load_voice()
+        if self.voice_name in KOKORO_VOICES:
+            self._speak_kokoro(text)
+        else:
+            self._speak_piper(text)
+
+    # -- Piper ---------------------------------------------------------------
+
+    def _speak_piper(self, text: str) -> None:
+        voice = self._load_engine()
         if voice is None:
             return
         from piper import SynthesisConfig
 
-        buffer = io.BytesIO()
-        with wave.open(buffer, "wb") as wav:
-            voice.synthesize_wav(
-                text, wav, syn_config=SynthesisConfig(volume=self.volume / 100)
-            )
-        winsound.PlaySound(buffer.getvalue(), winsound.SND_MEMORY)
+        syn = SynthesisConfig(volume=self.volume / 100)
+        frames: list[bytes] = []
+        params = None
+        for frase in FRASES.split(text):
+            if not frase.strip():
+                continue
+            buffer = io.BytesIO()
+            with wave.open(buffer, "wb") as wav:
+                voice.synthesize_wav(frase.strip(), wav, syn_config=syn)
+            buffer.seek(0)
+            with wave.open(buffer, "rb") as wav:
+                if params is None:
+                    params = wav.getparams()
+                frames.append(wav.readframes(wav.getnframes()))
+        if not frames or params is None:
+            return
+        silencio = b"\x00" * (
+            int(params.framerate * PAUSA_S) * params.sampwidth * params.nchannels
+        )
+        salida = io.BytesIO()
+        with wave.open(salida, "wb") as wav:
+            wav.setparams(params)
+            wav.writeframes(silencio.join(frames))
+        winsound.PlaySound(salida.getvalue(), winsound.SND_MEMORY)
 
-    def _load_voice(self):
+    # -- Kokoro --------------------------------------------------------------
+
+    def _speak_kokoro(self, text: str) -> None:
+        engine = self._load_engine()
+        if engine is None:
+            return
+        import numpy as np
+
+        samples, framerate = engine.create(
+            text, voice=KOKORO_VOICES[self.voice_name], speed=1.0, lang="es"
+        )
+        samples = (samples * (self.volume / 100) * 32767).clip(-32768, 32767)
+        salida = io.BytesIO()
+        with wave.open(salida, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(framerate)
+            wav.writeframes(samples.astype(np.int16).tobytes())
+        winsound.PlaySound(salida.getvalue(), winsound.SND_MEMORY)
+
+    # -- carga ---------------------------------------------------------------
+
+    def _load_engine(self):
         with self._load_lock:
-            if self._voice is None and self.available:
+            if self.voice_name in KOKORO_VOICES:
+                if self._kokoro is None and self.available:
+                    from kokoro_onnx import Kokoro
+
+                    self._kokoro = Kokoro(
+                        str(KOKORO_DIR / KOKORO_FILES[0]),
+                        str(KOKORO_DIR / KOKORO_FILES[1]),
+                    )
+                return self._kokoro
+            if self._piper is None and self.available:
                 from piper import PiperVoice
 
-                self._voice = PiperVoice.load(MODELS_DIR / f"{self.voice_name}.onnx")
-            return self._voice
+                self._piper = PiperVoice.load(
+                    PIPER_DIR / f"{self.voice_name}.onnx"
+                )
+            return self._piper

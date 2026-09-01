@@ -21,5 +21,8 @@ def abrir(config: dict, url: str) -> str:
             destino += ".com"
         destino = "https://" + destino
 
+    from jarvis.results import Rich
+
     os.startfile(destino)  # el esquema http lo abre el navegador predeterminado
-    return f"Abriendo {destino.removeprefix('https://').removeprefix('http://')}."
+    visible = destino.removeprefix("https://").removeprefix("http://")
+    return Rich(f"Abriendo {visible}.", speak="")

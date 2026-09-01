@@ -434,23 +434,30 @@ class Panel(QWidget):
         self._t0 = time.perf_counter()
         self.working.emit(True)
         self._placeholder = True
-        self.response.setMaximumHeight(120)
-        self.response.setPlainText(f"⏳ {label}…")
-        self.response.show()
+        self._set_response(text=f"⏳ {label}…")
         self._clear_rows()
         self.latency.hide()
+
+    def _set_response(self, text: str | None = None, html: str | None = None) -> None:
+        """Pinta la respuesta y ajusta la altura al contenido (sin hueco)."""
+        if html is not None:
+            self.response.setHtml(f"<div align='center'>{html}</div>")
+        else:
+            self.response.setPlainText(text or "")
+        self.response.show()
+        doc = self.response.document()
+        doc.setTextWidth(self.response.viewport().width() or WIDTH - 64)
+        alto = int(doc.size().height()) + 14
+        self.response.setFixedHeight(max(44, min(alto, 240)))
 
     def _on_fast_done(self, result: Result) -> None:
         self._busy = False
         self._placeholder = False
         self.working.emit(False)
         if result.html:
-            self.response.setMaximumHeight(230)
-            self.response.setHtml(result.html)
+            self._set_response(html=result.html)
         else:
-            self.response.setMaximumHeight(120)
-            self.response.setPlainText(result.text)
-        self.response.show()
+            self._set_response(text=result.text)
         if result.items:
             self._show_items(result.items)
         else:
@@ -460,7 +467,10 @@ class Panel(QWidget):
                 f"{result.elapsed_ms:.1f} ms · intent={result.intent_id}"
             )
             self.latency.show()
-        self.tts.speak(result.speak or result.text)
+        # speak="" = acción evidente, no se dicta; None = se lee el texto
+        hablado = result.speak if result.speak is not None else result.text
+        if hablado:
+            self.tts.speak(hablado)
 
     def _on_token(self, token: str) -> None:
         if self._placeholder:
@@ -469,6 +479,8 @@ class Panel(QWidget):
         cursor = self.response.textCursor()
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(token)
+        alto = int(self.response.document().size().height()) + 14
+        self.response.setFixedHeight(max(44, min(alto, 240)))
         self.response.ensureCursorVisible()
 
     def _on_llm_done(self, full: str, elapsed_ms: float) -> None:
@@ -498,7 +510,9 @@ class Panel(QWidget):
 
     @staticmethod
     def _voice_label(voice: str) -> str:
-        # "es_ES-davefx-medium" → "Davefx (es-ES)"
+        # "es_ES-davefx-medium" → "Davefx (es-ES)"; "kokoro:dora" → "Dora (Kokoro)"
+        if voice.startswith("kokoro:"):
+            return f"{voice.split(':', 1)[1].capitalize()} (Kokoro)"
         try:
             region, nombre, _calidad = voice.split("-", 2)
             return f"{nombre.capitalize()} ({region.replace('_', '-')})"

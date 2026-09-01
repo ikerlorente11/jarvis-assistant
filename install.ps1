@@ -27,11 +27,20 @@ if (-not (Test-Path ".venv")) {
 }
 & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
-# 3. Voz de Piper (TTS) — corre en CPU en todos los perfiles
-if (-not (Test-Path "models\piper\es_ES-davefx-medium.onnx")) {
-    Write-Host "[..] Descargando voz de Piper..."
-    New-Item -ItemType Directory -Force "models\piper" | Out-Null
-    & .\.venv\Scripts\python.exe -m piper.download_voices es_ES-davefx-medium --data-dir "models\piper"
+# 3. Voces TTS — corren en CPU en todos los perfiles
+New-Item -ItemType Directory -Force "models\piper" | Out-Null
+foreach ($voz in @("es_ES-davefx-medium", "es_ES-sharvard-medium", "es_ES-carlfm-x_low")) {
+    if (-not (Test-Path "models\piper\$voz.onnx")) {
+        Write-Host "[..] Descargando voz de Piper $voz..."
+        & .\.venv\Scripts\python.exe -m piper.download_voices $voz --data-dir "models\piper"
+    }
+}
+# Kokoro (mas calidad; voces es: dora/alex/santa)
+New-Item -ItemType Directory -Force "models\kokoro" | Out-Null
+if (-not (Test-Path "models\kokoro\kokoro-v1.0.onnx")) {
+    Write-Host "[..] Descargando modelo Kokoro (~310 MB)..."
+    Invoke-WebRequest -Uri "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx" -OutFile "models\kokoro\kokoro-v1.0.onnx"
+    Invoke-WebRequest -Uri "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin" -OutFile "models\kokoro\voices-v1.0.bin"
 }
 
 # 4. Modelos según el perfil detectado

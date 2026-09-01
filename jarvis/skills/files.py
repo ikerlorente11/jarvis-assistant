@@ -59,7 +59,7 @@ def buscar(config: dict, texto: str):
         for r in rutas
     ]
     plural = "s" if len(items) != 1 else ""
-    return Rich(f"He encontrado {len(items)} resultado{plural}:", items)
+    return Rich(f"He encontrado {len(items)} resultado{plural}:", items, speak="")
 
 
 def abrir(config: dict, texto: str) -> str:
@@ -69,6 +69,8 @@ def abrir(config: dict, texto: str) -> str:
         return "No encuentro es.exe (Everything) para buscar."
     if not rutas:
         return f"No he encontrado ningún archivo «{texto}»."
+    from jarvis.results import Rich
+
     mejor = max(rutas, key=lambda r: fuzz.WRatio(texto.lower(), Path(r).name.lower()))
     os.startfile(mejor)
-    return f"Abriendo {mejor}."
+    return Rich(f"Abriendo {mejor}.", speak="")

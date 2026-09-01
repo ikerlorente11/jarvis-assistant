@@ -18,8 +18,19 @@ UNIDADES = [
     (re.compile(r"(\d+)\s*°"), r"\1 grados"),
     (re.compile(r"(\d+)\s*km/h"), r"\1 kilómetros por hora"),
     (re.compile(r"(\d+)\s*%"), r"\1 por ciento"),
-    (re.compile(r"\b(\d{1,2}):(\d{2})\b"), r"\1 y \2"),  # 8:51 → "8 y 51"
 ]
+
+
+def _hora_hablada(match: re.Match) -> str:
+    """8:51 → "8 y 51"; 11:00 → "11 en punto"; 9:05 → "9 y 5"."""
+    hora, minutos = match.group(1), int(match.group(2))
+    if minutos == 0:
+        return f"{hora} en punto"
+    if minutos == 15:
+        return f"{hora} y cuarto"
+    if minutos == 30:
+        return f"{hora} y media"
+    return f"{hora} y {minutos}"
 
 RUTA = re.compile(r"[A-Za-z]:\\[^\s,;«»]+")
 SIMBOLOS = re.compile(r"[*_`#\"«»“”\[\]|]")
@@ -32,8 +43,14 @@ def normalizar(texto: str, replacements: dict | None = None) -> str:
     """Texto en pantalla → texto para pronunciar."""
     # rutas: se dice solo el nombre del archivo/carpeta
     texto = RUTA.sub(lambda m: Path(m.group(0)).name, texto)
+    texto = re.sub(r"\b(\d{1,2}):(\d{2})\b", _hora_hablada, texto)
     for patron, reemplazo in UNIDADES:
         texto = patron.sub(reemplazo, texto)
+    # unidades repetidas en la misma frase: "máxima 31 grados, mínima 16
+    # grados" → la segunda sobra
+    texto = re.sub(
+        r"(grados|por ciento|kilómetros por hora)([^.!?]*?\d+) \1", r"\1\2", texto
+    )
     # abreviaturas de días en la previsión ("mar 2:" → "martes 2:")
     texto = re.sub(
         r"\b(lun|mar|mié|jue|vie|sáb|dom)\b(?=\s+\d)",

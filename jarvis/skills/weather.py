@@ -73,9 +73,15 @@ def hoy(config: dict, ciudad: str | None = None) -> str:
         + (f", {cielo}" if cielo else "")
         + f". Máxima {maxima}°, mínima {minima}°. Viento {viento} km/h."
     )
+    hablado = (
+        f"En {sitio['name']}, {temp} grados"
+        + (f" y {cielo}" if cielo else "")
+        + f". Máxima {maxima}, mínima {minima}. "
+        f"Viento de {viento} kilómetros por hora."
+    )
     html = f"""
     <table cellspacing="0" cellpadding="2"><tr>
-      <td style="font-size:36px;padding-right:10px">{EMOJI.get(codigo, "🌡️")}</td>
+      <td style="font-size:30px;padding-right:10px">{EMOJI.get(codigo, "🌡️")}</td>
       <td>
         <span style="font-size:28px;color:#f0f4fb;font-weight:bold">{temp}°</span>
         <span style="font-size:13px;color:#8fa3c4">&nbsp;{cielo.capitalize()}</span><br>
@@ -84,7 +90,7 @@ def hoy(config: dict, ciudad: str | None = None) -> str:
         &nbsp;·&nbsp; 💨 {viento} km/h</span>
       </td>
     </tr></table>"""
-    return Rich(texto, html=html, speak=texto)
+    return Rich(texto, html=html, speak=hablado)
 
 
 def prevision(config: dict, dias: str = "7", ciudad: str | None = None) -> str:

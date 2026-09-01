@@ -14,35 +14,42 @@ def _volume_control():
     return AudioUtilities.GetSpeakers().EndpointVolume
 
 
-def volumen_subir(config: dict) -> str:
+def _sin_voz(texto: str):
+    """Confirmación evidente: se muestra pero no se dicta."""
+    from jarvis.results import Rich
+
+    return Rich(texto, speak="")
+
+
+def volumen_subir(config: dict):
     vol = _volume_control()
     nivel = min(1.0, vol.GetMasterVolumeLevelScalar() + 0.10)
     vol.SetMasterVolumeLevelScalar(nivel, None)
-    return f"Volumen al {round(nivel * 100)}%."
+    return _sin_voz(f"Volumen al {round(nivel * 100)}%.")
 
 
-def volumen_bajar(config: dict) -> str:
+def volumen_bajar(config: dict):
     vol = _volume_control()
     nivel = max(0.0, vol.GetMasterVolumeLevelScalar() - 0.10)
     vol.SetMasterVolumeLevelScalar(nivel, None)
-    return f"Volumen al {round(nivel * 100)}%."
+    return _sin_voz(f"Volumen al {round(nivel * 100)}%.")
 
 
-def volumen_poner(config: dict, nivel: str) -> str:
+def volumen_poner(config: dict, nivel: str):
     try:
         valor = int(nivel.strip().rstrip("%"))
     except ValueError:
         return f"«{nivel}» no es un porcentaje."
     valor = max(0, min(100, valor))
     _volume_control().SetMasterVolumeLevelScalar(valor / 100, None)
-    return f"Volumen al {valor}%."
+    return _sin_voz(f"Volumen al {valor}%.")
 
 
-def silenciar(config: dict) -> str:
+def silenciar(config: dict):
     vol = _volume_control()
     mute = not vol.GetMute()
     vol.SetMute(mute, None)
-    return "Silenciado." if mute else "Sonido activado."
+    return _sin_voz("Silenciado." if mute else "Sonido activado.")
 
 
 def bateria(config: dict):
@@ -75,11 +82,17 @@ def captura(config: dict) -> str:
     ruta = destino / f"captura-{datetime.now():%Y%m%d-%H%M%S}.png"
     with mss.mss() as sct:
         sct.shot(mon=-1, output=str(ruta))  # todos los monitores
-    return f"Captura guardada en {ruta}."
+    from jarvis.results import Item, Rich
+
+    return Rich(
+        "Captura guardada:",
+        items=[Item("file", ruta.name, str(ruta))],
+        speak="",
+    )
 
 
-def minimizar_todo(config: dict) -> str:
+def minimizar_todo(config: dict):
     import comtypes.client
 
     comtypes.client.CreateObject("Shell.Application").MinimizeAll()
-    return "Ventanas minimizadas."
+    return _sin_voz("Ventanas minimizadas.")

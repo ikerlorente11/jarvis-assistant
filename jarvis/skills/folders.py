@@ -29,6 +29,8 @@ def abrir(config: dict, carpeta: str) -> str:
     for con, sub in CONOCIDAS.items():
         candidatos.setdefault(con, Path.home() / sub)
 
+    from jarvis.results import Rich
+
     # 1. Conocidas y alias, con tolerancia a erratas ("descargs").
     match = process.extractOne(
         nombre, list(candidatos.keys()), scorer=fuzz.WRatio, score_cutoff=FUZZY_CUTOFF
@@ -37,17 +39,17 @@ def abrir(config: dict, carpeta: str) -> str:
         ruta = Path(str(candidatos[match[0]])).expanduser()
         if ruta.is_dir():
             os.startfile(ruta)
-            return f"Abriendo {match[0]}."
+            return Rich(f"Abriendo {match[0]}.", speak="")
 
     # 2. Ruta literal.
     ruta = Path(nombre).expanduser()
     if ruta.is_dir():
         os.startfile(ruta)
-        return f"Abriendo {ruta}."
+        return Rich(f"Abriendo {ruta}.", speak="")
 
     # 3. Everything: carpetas cuyo nombre contenga lo pedido. Ventana amplia:
     # con pocas, la carpeta de nombre exacto puede quedarse fuera.
-    from jarvis.results import Item, Rich
+    from jarvis.results import Item
 
     rutas = everything(config, f"folder:{nombre}", max_results=200)
     if rutas is None:
@@ -61,9 +63,11 @@ def abrir(config: dict, carpeta: str) -> str:
     # Nombre clavado → se abre directa; si no, mejor preguntar que adivinar.
     if Path(mejor).name.lower() == nombre:
         os.startfile(mejor)
-        return f"Abriendo {Path(mejor).name}."
+        return Rich(f"Abriendo {Path(mejor).name}.", speak="")
     items = [Item("folder", Path(r).name, r) for r in ordenadas[:6]]
-    return Rich(f"He encontrado {len(items)} carpetas parecidas, elige:", items)
+    return Rich(
+        f"He encontrado {len(items)} carpetas parecidas, elige:", items, speak=""
+    )
 
 
 def _clave_carpeta(nombre: str, ruta: str) -> tuple:

@@ -18,3 +18,4 @@ winrt-Windows.Devices.Geolocation==3.2.1
 winrt-Windows.Foundation==3.2.1
 # Fase 2 — TTS opcional
 piper-tts==1.7.0
+kokoro-onnx==0.6.1

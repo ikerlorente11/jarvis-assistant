@@ -33,16 +33,22 @@ def abrir(config: dict, app: str) -> str:
     nombre = app.strip().lower()
     objetivo = alias.get(nombre, nombre)
 
+    from jarvis.results import Rich
+
+    def abierto(nombre: str) -> Rich:
+        # acción evidente elegida por el usuario: se muestra, no se dicta
+        return Rich(f"Abriendo {nombre}.", speak="")
+
     if objetivo == "default-browser":
         exe = _default_browser()
         if exe is None:
             return "No he podido averiguar el navegador predeterminado."
         os.startfile(exe)
-        return "Abriendo el navegador."
+        return abierto("el navegador")
 
     # Fuzzy sobre lo instalado: tolera errores de escritura. Con un match
     # claro se abre; con varios dudosos se ofrece elegir.
-    from jarvis.results import Item, Rich
+    from jarvis.results import Item
 
     indice = _installed_apps()
     candidatos = process.extract(
@@ -59,13 +65,17 @@ def abrir(config: dict, app: str) -> str:
         )
         if claro or len(candidatos) == 1:
             os.startfile(indice[mejor])
-            return f"Abriendo {mejor}."
+            return abierto(mejor)
         items = [Item("app", nombre, indice[nombre]) for nombre, _, _ in candidatos]
-        return Rich(f"He encontrado varios programas parecidos a «{app}», elige:", items)
+        return Rich(
+            f"He encontrado varios programas parecidos a «{app}», elige:",
+            items,
+            speak="",
+        )
 
     try:
         os.startfile(objetivo)
-        return f"Abriendo {app}."
+        return abierto(app)
     except OSError:
         pass
 
