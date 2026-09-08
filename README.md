@@ -71,3 +71,8 @@ Lo que ya funciona:
 - **LLM**: Ollama + Qwen3 8B (function calling nativo, buen español)
 - **TTS**: Piper (tiempo real en CPU, voces es_ES) — Kokoro como alternativa de calidad
 - **Sin IA**: Everything (búsqueda de archivos instantánea), Open-Meteo (tiempo sin API key), APScheduler (tareas), SMTP (correo)
+
+## Licencia
+
+Puedes usar, modificar y compartir este proyecto libremente para fines **no comerciales**.
+No está permitido venderlo ni ganar dinero con él. Ver [LICENSE](LICENSE) (PolyForm Noncommercial 1.0.0).
