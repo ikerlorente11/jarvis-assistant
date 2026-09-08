@@ -18,7 +18,7 @@ consigue con `install.ps1` + versiones fijadas en `requirements.txt`.
 
 ## Repositorio
 
-- **GitHub: `ikerlorente11/jarvis-assistant`** (privado).
+- **GitHub: `ikerlorente11/jarvis-assistant`** (público, licencia PolyForm Noncommercial).
 - `models/` y secretos **fuera del repo** (`.gitignore`); los descarga
   `install.ps1`. Secretos (SMTP) en Windows Credential Manager.
 
