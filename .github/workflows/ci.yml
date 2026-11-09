@@ -4,7 +4,10 @@ name: CI
 on:
   push:
     branches: [main]
+    # Solo documentación: no lanza el CI (los lunes y a mano se ejecuta todo igualmente)
+    paths-ignore: ["**.md", "docs/**", ".claude/**", "LICENSE"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**", ".claude/**", "LICENSE"]
   workflow_dispatch: {}
 
 concurrency:
