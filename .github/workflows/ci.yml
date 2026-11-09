@@ -1,0 +1,20 @@
+name: CI
+
+# CI común (github.com/ikerlorente11/ci): en cada push, que todo el código compile (las dependencias son de Windows y no hay tests todavía).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    uses: ikerlorente11/ci/.github/workflows/python.yml@main
+    with:
+      deps: requirements.txt
+      install: "true"
+      test: python -m compileall -q jarvis
