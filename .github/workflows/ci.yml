@@ -15,6 +15,6 @@ jobs:
   python:
     uses: ikerlorente11/ci/.github/workflows/python.yml@main
     with:
-      deps: requirements.txt
+      cache: false
       install: "true"
       test: python -m compileall -q jarvis
